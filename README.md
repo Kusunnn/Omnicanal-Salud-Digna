@@ -60,3 +60,16 @@ Usa el `patientId` de la sesión y el `id` del caso creado. Sigue la versión de
 Para probar asesor o administrador, configura `DemoIdentity:AdvisorKey` y `DemoIdentity:AdminKey` en User Secrets. Inicia sesión con `POST /api/demo/identidad/personal` y un cuerpo con `rol` (`ASESOR` o `ADMIN`) y `clave`. Ambos roles pueden consultar `GET /api/tablero/casos`; el asesor puede actualizar el caso con el canal `CALL_CENTER`.
 
 Los avances intermedios se guardan en Redis y se sincronizan con PostgreSQL tras 5 minutos sin cambios, con un máximo programado de 10 minutos. Las reanudaciones y las confirmaciones simuladas se guardan de inmediato en PostgreSQL. Si Redis falla, la lectura puede mostrar el último estado confirmado.
+
+## Portal web de demostración
+
+Ejecuta el frontend desde la raíz:
+
+```powershell
+npm --prefix Frontend ci
+npm --prefix Frontend run dev
+```
+
+Abre http://localhost:5173. El portal funciona de forma local: crea un caso de Ultrasonido o Rayos X y guarda los checkpoints en el navegador. La vista de operador en http://localhost:5173/?vista=operador lee los mismos casos en el mismo navegador. La demo incluye un caso ficticio iniciado en WhatsApp.
+
+Para probar más adelante la conexión real, inicia el backend en Development con los pacientes ficticios y ejecuta Vite con `$env:VITE_USE_BACKEND = 'true'`. Los casos de demo y los de PostgreSQL se guardan por separado.

@@ -106,3 +106,22 @@ body:has(.workspaceHeader){background:#f3f8fa}
 .portalWorkspace .cardStep,.portalWorkspace .cardClinic{font-size:.84rem;margin-top:3px}
 .portalWorkspace .cardContinue{padding:5px 7px;margin-top:7px;font-size:.8rem}
 .portalWorkspace .laneEmpty{padding:10px 3px;font-size:.83rem}
+
+.portalMenuItems .portalTextAction{display:inline-flex;align-items:center;gap:6px;border:0;background:#edf6fd;color:#126391;border-radius:5px;padding:6px 9px;font:inherit}
+.servicesHome{max-width:none;padding:0}
+.servicesHero{background:linear-gradient(120deg,#0b5143,#278167);color:white}
+.servicesHeroInner{max-width:1000px;margin:auto;padding:clamp(35px,7vw,82px) clamp(20px,5vw,55px);display:flex;align-items:center;justify-content:space-between;gap:20px}
+.servicesHero h1{max-width:570px}.servicesHero p,.servicesHero .eyebrow{color:#e0f5ed}
+.servicesJump{display:inline-block;margin-top:16px;background:#f6df8c;color:#213d32;text-decoration:none;font-weight:700;border-radius:7px;padding:9px 13px}
+.servicesIllustration{display:grid;place-items:center;color:#e2f4ec;border:1px solid #ffffff61;border-radius:32px;background:#ffffff15;width:clamp(90px,23vw,200px);aspect-ratio:1;flex:none}
+.servicesCatalog{max-width:1000px;margin:auto;padding:24px clamp(20px,5vw,55px) 45px}.serviceChoices{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:14px;margin-top:14px}
+.serviceChoice{display:grid;justify-items:start;gap:5px;text-align:left;padding:15px;background:#fff;color:#155e92;border:1px solid #cfe2ee;border-radius:10px;box-shadow:0 4px 12px #143d5610}
+.serviceChoice:hover{background:#eef7fd}.serviceChoice span{color:#476575;font-size:.85rem}
+@media(max-width:525px){.servicesIllustration{display:none}}
+
+.portalServicesMenu{position:relative;flex:none}
+.portalServicesList{position:absolute;z-index:5;top:calc(100% + 7px);left:0;min-width:170px;margin:0;padding:5px;list-style:none;background:#fff;border:1px solid #d2e4ef;border-radius:8px;box-shadow:0 7px 22px #173c5526}
+.portalServicesList button{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:0;border-radius:5px;background:#fff;color:#155e92;text-align:left;font:inherit;white-space:nowrap}
+.portalServicesList button:hover,.portalServicesList button:focus-visible{background:#edf6fd}
+
+.portalTextAction .pendingDot{display:inline-block;flex:none;width:8px;height:8px;margin-left:2px;border-radius:50%;background:#cb2436}
