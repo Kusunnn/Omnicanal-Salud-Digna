@@ -7,10 +7,10 @@ Bot de WhatsApp (Cloud API de Meta, Node.js + Express) para OmniCanal Salud Dign
 | Archivo | Qué contiene |
 |---|---|
 | `mensajes.js` | Textos del bot y de los botones de cada paso |
-| `catalogo.js` | Copia del catálogo de servicios y pasos de `ConsultationCatalog.cs` |
+| `catalogo.js` | Carga los servicios y sus pasos desde la API del backend |
 | `flujo.js` | Decide qué contestar según lo que escribe o toca el paciente |
 | `index.js` | Webhook y envío de mensajes a WhatsApp |
-| `.env` | Token y datos de Meta (se crea a partir de `.env.example`, no se sube a GitHub) |
+| `.env` | Archivo local con los valores `META_TOKEN`, `META_PHONE_NUMBER_ID` y `VERIFY_TOKEN` |
 
 ## Cómo funciona
 
@@ -19,14 +19,14 @@ Bot de WhatsApp (Cloud API de Meta, Node.js + Express) para OmniCanal Salud Dign
   - Laboratorio: prerregistro → clínica → revisar datos → confirmar → resumen, o consultar estudios.
   - Los demás: cotizar → clínica → horario → confirmar sin pago o pagar → resumen, o consultar requisitos.
 - También funciona si el paciente escribe el nombre del servicio, por ejemplo "rayos x".
-- Si el backend está corriendo y pones `BACKEND_URL` en el `.env`, el bot lee el catálogo en vivo de `GET /api/tipos-consulta`. Si no, usa la copia de `catalogo.js`.
+- El chatbot carga `GET /api/tipos-consulta` al arrancar. Si existen varias versiones de un servicio, muestra una sola opción con la versión más reciente.
 
 ## Cómo prenderlo
 
-1. Abre una terminal en la carpeta `Chatbot`.
-2. `npm install` (solo la primera vez).
-3. Copia `.env.example` como `.env` y llena tus datos de Meta.
-4. `npm start`
+1. Inicia el backend con `dotnet run --project Backend` desde la raíz del repositorio.
+2. En otra terminal, entra a `Chatbot` y ejecuta `npm ci`.
+3. Configura tus credenciales de prueba en `Chatbot/.env`. El bot usa `http://localhost:5080` por defecto; si tu backend tiene otra dirección, agrega `BACKEND_URL` al archivo.
+4. Ejecuta `npm start`. El bot muestra cuántos servicios cargó y avisa si el backend no responde.
 5. En otra terminal: `ngrok http 3000`
 6. En Meta > WhatsApp > Configuración > Webhooks:
    - Callback URL: tu dirección de ngrok + `/webhook`
@@ -34,7 +34,7 @@ Bot de WhatsApp (Cloud API de Meta, Node.js + Express) para OmniCanal Salud Dign
    - Suscríbete al campo **messages**
 7. Escribe "hola" al número de WhatsApp desde un número que esté en la lista de destinatarios.
 
-Cada vez que cambies un archivo o el `.env`, reinicia el bot: Ctrl + C y luego `npm start`.
+Si cambias el catálogo del backend o el `.env`, reinicia el bot con **Ctrl+C** y `npm start`.
 
 ## Notas
 

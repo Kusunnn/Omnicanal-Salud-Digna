@@ -148,9 +148,14 @@ async function enviar(numero, respuesta) {
   }
 }
 
-cargarCatalogo(BACKEND_URL).then(() => {
+cargarCatalogo(BACKEND_URL).then((cantidad) => {
+  console.log(`Catálogo cargado del backend: ${cantidad} servicios`);
   app.listen(PORT, () => {
     console.log(`Chatbot prendido en http://localhost:${PORT}`);
     console.log(`Siguiente paso: en otra terminal corre  ngrok http ${PORT}`);
   });
+}).catch((error) => {
+  console.error("No se pudo cargar el catálogo. Inicia el backend y revisa BACKEND_URL.");
+  console.error(error.cause?.code || error.message);
+  process.exitCode = 1;
 });
