@@ -10,5 +10,8 @@ public sealed class Patient
     public string? LugarNacimiento { get; set; }
     public string? Sexo { get; set; }
     public string? Correo { get; set; }
+    public string NivelIdentidad { get; private set; } = "BASICO";
+    public DateTime? CurpValidadaAt { get; private set; }
+    public DateTime UpdatedAt { get; private set; }
     public DateTime CreatedAt { get; private set; }
 }

@@ -1,79 +1,58 @@
 # OmniCanal Salud Digna
 
-Backend en C# con ASP.NET Core MVC y .NET 10. PostgreSQL guarda pacientes, casos y eventos. Redis está conectado como caché distribuida. Las consultas de negocio todavía no usan la caché.
+Backend de demostración en ASP.NET Core MVC y .NET 10. El mismo caso puede continuar entre canales con un catálogo compartido de 13 servicios simulados.
 
-## 1. Instala los requisitos en Windows
+## Arranque en Windows
 
-- **SDK de .NET 10.** Instala el SDK y verifica la versión con `dotnet --list-sdks`. [Descargar .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **PostgreSQL.** Usa el instalador para Windows. Conserva el puerto `5432` si está libre y guarda la contraseña que elijas para el usuario `postgres`. El instalador incluye pgAdmin. Si ya tienes una instancia local de PostgreSQL, puedes usarla. [Instalador de PostgreSQL para Windows](https://www.postgresql.org/download/windows/)
-- **Docker Desktop**, si vas a ejecutar Redis localmente. Inícialo con contenedores Linux. El backend puede arrancar mientras Redis está apagado. [Redis en Docker](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/)
+Instala el [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) y [PostgreSQL para Windows](https://www.postgresql.org/download/windows/). Para probar Redis localmente, usa [Docker Desktop con contenedores Linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/).
 
-Abre PowerShell en la carpeta del repositorio que contiene `Backend` y `dotnet-tools.json`. Restaura la herramienta local de EF Core y los paquetes NuGet:
-
-```powershell
-dotnet tool restore
-dotnet restore Backend
-```
-
-La restauración instala las dependencias del proyecto, incluidas Entity Framework Core, Npgsql y el proveedor de caché Redis.
-
-## 2. Configura User Secrets
-
-El proyecto ya tiene un `UserSecretsId`. Ejecuta estos comandos para crear el archivo con una cadena de ejemplo y abrirlo en el Bloc de notas. Si ya configuraste la conexión, conserva la cadena existente y abre el archivo directamente.
+Abre PowerShell en la raíz del repositorio. Si todavía no tienes configurada la conexión, inicializa User Secrets con este ejemplo:
 
 ```powershell
 dotnet user-secrets set "ConnectionStrings:SaludDigna" "Host=localhost;Port=5432;Database=Salud Digna;Username=postgres;Password=TU_CONTRASEÑA" --project Backend
-
-[xml]$project = Get-Content -Raw '.\Backend\SaludDigna.Backend.csproj'
-$secretsId = $project.SelectSingleNode('//UserSecretsId').InnerText
-notepad (Join-Path $env:APPDATA "Microsoft\UserSecrets\$secretsId\secrets.json")
 ```
 
-En el archivo, sustituye `TU_CONTRASEÑA` por la contraseña de PostgreSQL. Ajusta también `Username` o `Port` si tu instancia usa otros valores. El archivo queda fuera del repositorio, en `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`. [User Secrets en ASP.NET Core](https://learn.microsoft.com/es-es/aspnet/core/security/app-secrets?tabs=windows&view=aspnetcore-10.0)
+Reemplaza el valor de ejemplo en `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`. El identificador está en `Backend/SaludDigna.Backend.csproj`. Si ya tienes una conexión configurada, úsala. [User Secrets en Windows](https://learn.microsoft.com/es-es/aspnet/core/security/app-secrets?tabs=windows&view=aspnetcore-10.0)
 
-## 3. Crea la base y aplica la migración
-
-Con PostgreSQL en marcha, ejecuta en PowerShell:
+Con PostgreSQL en marcha, restaura la herramienta local, compila y aplica las migraciones:
 
 ```powershell
-$env:DOTNET_ENVIRONMENT = 'Development'
+dotnet tool restore
 dotnet build Backend
+$env:DOTNET_ENVIRONMENT = 'Development'
 dotnet tool run dotnet-ef database update --project Backend --no-build
 ```
 
-EF Core crea la base `Salud Digna` si aún no existe y aplica la migración que crea `patients`, `cases` y `events`. Si usas un rol con permisos limitados, pide al administrador de PostgreSQL que cree la base y le conceda permisos para aplicar las migraciones. Puedes verificar las tablas en pgAdmin bajo **Databases → Salud Digna → Schemas → public → Tables**.
-
-### Carga opcional de pacientes ficticios
-
-Aplica primero las migraciones. La migración de pacientes requiere una CURP para cada registro. Si una base existente tiene pacientes con CURP nula, completa sus datos con los valores correctos antes de volver a ejecutarla.
-
-En pgAdmin, selecciona la base `Salud Digna`, abre **Query Tool**, carga `Backend/Data/Seeds/pacientes-ficticios.sql` y ejecútalo. También puedes hacerlo desde PowerShell si tienes `psql` en el PATH:
+EF Core crea la base si el usuario tiene permiso. Para cargar los 200 pacientes ficticios, ejecuta lo siguiente o abre el script en **Query Tool** de pgAdmin sobre la base `Salud Digna`:
 
 ```powershell
-psql -h localhost -p 5432 -U postgres -d 'Salud Digna' -v ON_ERROR_STOP=1 -f '.\Backend\Data\Seeds\pacientes-ficticios.sql'
+psql -h localhost -p 5432 -U postgres -d 'Salud Digna' -v ON_ERROR_STOP=1 -c "SET client_encoding TO 'UTF8'" -f '.\Backend\Data\Seeds\pacientes-ficticios.sql'
 ```
 
-El script agrega 200 pacientes ficticios y se puede volver a ejecutar sin duplicarlos. Las claves con prefijo `DEMO` son identificadores de prueba. Ejecuta el script en una base de desarrollo.
-
-## 4. Inicia Redis
-
-Con Docker Desktop abierto, crea el contenedor una sola vez. El puerto queda publicado en la interfaz local de Windows:
+Con Docker Desktop abierto, crea Redis una vez y arranca el backend:
 
 ```powershell
-docker run -d --name salud-digna-redis -p 127.0.0.1:6379:6379 redis:8
-docker exec salud-digna-redis redis-cli ping
-```
-
-La segunda orden debe devolver `PONG`. Si el contenedor ya existe, enciéndelo con `docker start salud-digna-redis`. Para apagarlo, ejecuta `docker stop salud-digna-redis`. La configuración de desarrollo usa `127.0.0.1:6379`. Si tu instancia usa otra dirección o requiere credenciales, guarda la conexión en User Secrets con la clave `ConnectionStrings:Redis`.
-
-## 5. Arranca y verifica el backend
-
-```powershell
+docker run -d --name salud-digna-redis -p 127.0.0.1:6379:6379 -v salud-digna-redis:/data redis:8 redis-server --appendonly yes --appendfsync everysec --maxmemory-policy noeviction
 dotnet run --project Backend
 ```
 
-- [Página inicial](http://localhost:5080/) muestra la vista MVC.
-- [Salud del backend](http://localhost:5080/health) confirma que el proceso responde.
-- [Salud de Redis](http://localhost:5080/health/redis) devuelve HTTP 200 si Redis responde y HTTP 503 si está apagado o no se puede conectar.
+Para reutilizar el contenedor, ejecuta `docker start salud-digna-redis`. Comprueba el [backend](http://localhost:5080/health), [Redis](http://localhost:5080/health/redis) y el [catálogo](http://localhost:5080/api/tipos-consulta).
 
-Para detener el backend, pulsa **Ctrl+C** en la terminal. Si el puerto HTTP `5080` está ocupado, puedes arrancar con `dotnet run --project Backend -- --urls http://localhost:5081` y abrir las mismas rutas en `5081`.
+## Prueba rápida en Thunder Client
+
+Usa `http://localhost:5080` y conserva la cookie de sesión. Las credenciales son de prueba y funcionan con el perfil `Development`.
+
+| Paso | Petición | Cuerpo JSON |
+|---|---|---|
+| Iniciar sesión como paciente | `POST /api/demo/identidad/paciente` | `{"curp":"DEMO00000000000001","telefono":"+520000000001"}` |
+| Crear un caso en Web | `POST /api/pacientes/{patientId}/casos` | `{"tipoConsultaId":"ultrasonido","canal":"WEB"}` |
+| Cotizar | `PUT /api/pacientes/{patientId}/casos/{caseId}/checkpoint` | `{"pasoActual":"cotizado","canal":"WEB","versionEsperada":1}` |
+| Seleccionar clínica | Mismo `PUT` | `{"pasoActual":"clinica-seleccionada","canal":"WEB","versionEsperada":2,"datos":{"clinica":"Clínica Demo"}}` |
+| Retomar en WhatsApp | `POST /api/pacientes/{patientId}/casos/{caseId}/retomar` | `{"canal":"WHATSAPP","versionEsperada":3,"interaccionId":"f38b1539-cf48-4b12-9171-86658f40e873"}` |
+| Ver el recorrido | `GET /api/pacientes/{patientId}/casos/{caseId}/eventos` | |
+
+Usa el `patientId` de la sesión y el `id` del caso creado. Sigue la versión devuelta en cada respuesta y genera otro `interaccionId` para una reanudación nueva.
+
+Para probar asesor o administrador, configura `DemoIdentity:AdvisorKey` y `DemoIdentity:AdminKey` en User Secrets. Inicia sesión con `POST /api/demo/identidad/personal` y un cuerpo con `rol` (`ASESOR` o `ADMIN`) y `clave`. Ambos roles pueden consultar `GET /api/tablero/casos`; el asesor puede actualizar el caso con el canal `CALL_CENTER`.
+
+Los avances intermedios se guardan en Redis y se sincronizan con PostgreSQL tras 5 minutos sin cambios, con un máximo programado de 10 minutos. Las reanudaciones y las confirmaciones simuladas se guardan de inmediato en PostgreSQL. Si Redis falla, la lectura puede mostrar el último estado confirmado.

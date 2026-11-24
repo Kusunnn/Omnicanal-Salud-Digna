@@ -23,6 +23,48 @@ namespace SaludDigna.Backend.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SaludDigna.Backend.Models.BiometricVerification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("proveedor");
+
+                    b.Property<string>("ReferenciaExterna")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("referencia_externa");
+
+                    b.Property<DateTime?>("RevocadaAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revocada_at");
+
+                    b.Property<DateTime>("VerificadaAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verificada_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("Proveedor", "ReferenciaExterna")
+                        .IsUnique();
+
+                    b.ToTable("biometric_verifications", (string)null);
+                });
+
             modelBuilder.Entity("SaludDigna.Backend.Models.CaseEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -30,6 +72,11 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("Canal")
                         .IsRequired()
@@ -41,10 +88,32 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("case_id");
 
+                    b.Property<int?>("CaseVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("case_version");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("InteraccionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("interaccion_id");
+
+                    b.Property<string>("ModoPersistencia")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasDefaultValue("INMEDIATO")
+                        .HasColumnName("modo_persistencia");
+
+                    b.Property<DateTime>("OcurridoAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ocurrido_at")
                         .HasDefaultValueSql("now()");
 
                     b.Property<JsonElement>("PayloadJson")
@@ -66,13 +135,19 @@ namespace SaludDigna.Backend.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CaseId", "CreatedAt", "Id")
+                    b.HasIndex("CaseId", "InteraccionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_events_case_interaccion");
+
+                    b.HasIndex("CaseId", "OcurridoAt", "Id")
                         .IsDescending(false, true, true)
-                        .HasDatabaseName("ix_events_case_created_at");
+                        .HasDatabaseName("ix_events_case_ocurrido_at");
 
                     b.ToTable("events", null, t =>
                         {
-                            t.HasCheckConstraint("ck_events_canal", "canal IN ('WEB', 'WHATSAPP', 'CALL_CENTER')");
+                            t.HasCheckConstraint("ck_events_canal", "canal IN ('WEB', 'WHATSAPP', 'CALL_CENTER', 'APP', 'CLINICA')");
+
+                            t.HasCheckConstraint("ck_events_modo_persistencia", "modo_persistencia IN ('INMEDIATO', 'LOTE')");
 
                             t.HasCheckConstraint("ck_events_payload", "jsonb_typeof(payload_json) = 'object'");
                         });
@@ -103,6 +178,10 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("character varying(18)")
                         .HasColumnName("curp");
 
+                    b.Property<DateTime?>("CurpValidadaAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("curp_validada_at");
+
                     b.Property<DateOnly?>("FechaNacimiento")
                         .HasColumnType("date")
                         .HasColumnName("fecha_nacimiento");
@@ -112,6 +191,14 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("lugar_nacimiento");
 
+                    b.Property<string>("NivelIdentidad")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("BASICO")
+                        .HasColumnName("nivel_identidad");
+
                     b.Property<string>("NombreCompleto")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -119,8 +206,7 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnName("nombre_completo");
 
                     b.Property<string>("Sexo")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasColumnType("character(1)")
                         .HasColumnName("sexo");
 
                     b.Property<string>("Telefono")
@@ -129,13 +215,29 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("telefono");
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("Curp")
+                        .IsUnique()
+                        .HasDatabaseName("ux_patients_curp");
 
                     b.HasIndex("Telefono")
                         .HasDatabaseName("ix_patients_telefono");
 
                     b.ToTable("patients", null, t =>
                         {
+                            t.HasCheckConstraint("ck_patients_curp", "curp <> '' AND curp = upper(btrim(curp))");
+
+                            t.HasCheckConstraint("ck_patients_nivel_identidad", "nivel_identidad IN ('BASICO', 'CURP_VALIDADA', 'BIOMETRICO_CLINICA')");
+
+                            t.HasCheckConstraint("ck_patients_sexo", "sexo IN ('H', 'M', 'X')");
+
                             t.HasCheckConstraint("ck_patients_telefono", "telefono ~ '^[+][1-9][0-9]{1,14}$'");
                         });
                 });
@@ -152,6 +254,12 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasMaxLength(180)
                         .HasColumnType("character varying(180)")
                         .HasColumnName("clinica");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
 
                     b.Property<JsonElement>("DatosParciales")
                         .ValueGeneratedOnAdd()
@@ -172,6 +280,29 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnType("character varying(180)")
                         .HasColumnName("estudio");
 
+                    b.Property<DateOnly?>("FechaCita")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_cita");
+
+                    b.Property<int>("FlujoVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("flujo_version");
+
+                    b.Property<TimeOnly?>("HorarioCita")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("horario_cita");
+
+                    b.Property<DateTime?>("InicioCitaAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inicio_cita_at");
+
+                    b.Property<string>("ParentescoPaciente")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("parentesco_paciente");
+
                     b.Property<string>("PasoActual")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -181,6 +312,20 @@ namespace SaludDigna.Backend.Data.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
+
+                    b.Property<Guid?>("SolicitantePatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitante_patient_id");
+
+                    b.Property<string>("SolicitanteTelefono")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("solicitante_telefono");
+
+                    b.Property<string>("TipoConsultaId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("tipo_consulta_id");
 
                     b.Property<string>("UltimoCanal")
                         .IsRequired()
@@ -194,7 +339,16 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("SolicitantePatientId");
 
                     b.HasIndex("PatientId", "Estado", "UpdatedAt")
                         .IsDescending(false, false, true)
@@ -206,8 +360,17 @@ namespace SaludDigna.Backend.Data.Migrations
 
                             t.HasCheckConstraint("ck_cases_estado", "estado IN ('EN_PROGRESO', 'INTERRUMPIDO', 'COMPLETADO')");
 
-                            t.HasCheckConstraint("ck_cases_ultimo_canal", "ultimo_canal IN ('WEB', 'WHATSAPP', 'CALL_CENTER')");
+                            t.HasCheckConstraint("ck_cases_ultimo_canal", "ultimo_canal IN ('WEB', 'WHATSAPP', 'CALL_CENTER', 'APP', 'CLINICA')");
                         });
+                });
+
+            modelBuilder.Entity("SaludDigna.Backend.Models.BiometricVerification", b =>
+                {
+                    b.HasOne("SaludDigna.Backend.Models.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SaludDigna.Backend.Models.CaseEvent", b =>
@@ -226,6 +389,11 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("SaludDigna.Backend.Models.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitantePatientId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618
         }

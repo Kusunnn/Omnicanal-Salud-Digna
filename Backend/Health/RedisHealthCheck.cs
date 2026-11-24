@@ -1,15 +1,14 @@
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using StackExchange.Redis;
 
 namespace SaludDigna.Backend.Health;
 
-internal sealed class RedisHealthCheck(IDistributedCache cache) : IHealthCheck
+internal sealed class RedisHealthCheck(IConnectionMultiplexer connection) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        // A missing key is expected. A successful read confirms Redis is reachable.
-        await cache.GetAsync("health:probe", cancellationToken);
+        await connection.GetDatabase().PingAsync().WaitAsync(cancellationToken);
         return HealthCheckResult.Healthy();
     }
 }

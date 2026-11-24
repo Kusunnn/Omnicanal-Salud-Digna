@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using SaludDigna.Backend.Data;
 using SaludDigna.Backend.Models;
@@ -12,6 +14,7 @@ namespace SaludDigna.Backend.Controllers;
 public sealed class PatientsController(SaludDignaDbContext database) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "ASESOR,ADMIN")]
     public async Task<ActionResult<IReadOnlyList<PatientResponse>>> Get(
         CancellationToken cancellationToken,
         [FromQuery, Range(1, 100)] int limite = 25)
@@ -28,6 +31,7 @@ public sealed class PatientsController(SaludDignaDbContext database) : Controlle
     }
 
     [HttpPost]
+    [Authorize(Roles = "ASESOR")]
     public async Task<ActionResult<PatientResponse>> Post(
         CreatePatientRequest request,
         CancellationToken cancellationToken)
@@ -36,14 +40,22 @@ public sealed class PatientsController(SaludDignaDbContext database) : Controlle
         {
             NombreCompleto = request.NombreCompleto.Trim(),
             Telefono = request.Telefono,
-            Curp = request.Curp.Trim(),
+            Curp = request.Curp.Trim().ToUpperInvariant(),
             FechaNacimiento = request.FechaNacimiento,
             LugarNacimiento = request.LugarNacimiento?.Trim(),
             Sexo = request.Sexo?.Trim()
         };
 
         database.Patients.Add(patient);
-        await database.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await database.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+               { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_patients_curp" })
+        {
+            return Conflict(new { mensaje = "Ya existe un paciente con esa CURP." });
+        }
 
         var response = new PatientResponse(patient.Id, patient.NombreCompleto, patient.CreatedAt);
         return StatusCode(StatusCodes.Status201Created, response);

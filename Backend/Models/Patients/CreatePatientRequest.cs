@@ -21,6 +21,6 @@ public sealed class CreatePatientRequest
     [StringLength(100)]
     public string? LugarNacimiento { get; init; }
 
-    [StringLength(20)]
+    [RegularExpression("H|M|X")]
     public string? Sexo { get; init; }
 }
