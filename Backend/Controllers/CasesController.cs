@@ -26,7 +26,7 @@ public sealed class CasesController(
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CaseCheckpoint>>> List(
-        Guid patientId, CancellationToken cancellationToken)
+        Guid patientId, CancellationToken cancellationToken, [FromQuery] bool incluirCompletados = false)
     {
         if (!IsOwnerOrStaff(patientId))
         {
@@ -35,7 +35,7 @@ public sealed class CasesController(
 
         var cases = await database.Cases.AsNoTracking()
             .Where(item => item.PatientId == patientId &&
-                (item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))
+                (incluirCompletados || item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))
             .ToListAsync(cancellationToken);
 
         var contexts = await ReadContextsAsync(patientId, cases.Select(item => item.Id).ToArray(), cancellationToken);

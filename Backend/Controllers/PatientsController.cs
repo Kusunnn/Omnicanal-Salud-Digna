@@ -17,10 +17,21 @@ public sealed class PatientsController(SaludDignaDbContext database) : Controlle
     [Authorize(Roles = "ASESOR,ADMIN")]
     public async Task<ActionResult<IReadOnlyList<PatientResponse>>> Get(
         CancellationToken cancellationToken,
-        [FromQuery, Range(1, 100)] int limite = 25)
+        [FromQuery, Range(1, 100)] int limite = 25,
+        [FromQuery, StringLength(200)] string? buscar = null)
     {
-        var patients = await database.Patients
-            .AsNoTracking()
+        var query = database.Patients.AsNoTracking();
+        var term = buscar?.Trim();
+        if (!string.IsNullOrEmpty(term))
+        {
+            var name = term.ToLowerInvariant();
+            var curp = term.ToUpperInvariant();
+            Guid.TryParse(term, out var id);
+            query = query.Where(patient => patient.NombreCompleto.ToLower().Contains(name)
+                || patient.Curp == curp || patient.Telefono == term || patient.Id == id);
+        }
+
+        var patients = await query
             .OrderByDescending(patient => patient.CreatedAt)
             .ThenByDescending(patient => patient.Id)
             .Take(limite)
