@@ -1,5 +1,6 @@
 .DS_Store
 **/bin/
+/Backend/bin\\*/
 **/obj/
 
 .env
