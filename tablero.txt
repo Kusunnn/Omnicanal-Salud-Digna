@@ -1,0 +1,272 @@
+// Calendario semanal de tareas (extraído de Naatzo: TeamCalendar.tsx)
+// Independiente: solo necesita react y date-fns. Estilos en TaskCalendar.css.
+import { useState } from "react";
+import {
+  format,
+  startOfWeek,
+  addDays,
+  isSameDay,
+  isToday,
+  isBefore,
+  startOfDay,
+} from "date-fns";
+import { es } from "date-fns/locale";
+import "./TaskCalendar.css";
+/* ---------- Tipos ---------- */
+export type TaskStatus = "todo" | "first-tasks" | "in-progress" | "review" | "done";
+export type TaskPriority = "alta" | "media" | "baja";
+export interface CalendarMember {
+  id: string;
+  name: string;
+  initials: string;
+  color: string; // ej. "#4a90e2"
+}
+export interface AcceptanceCriterion {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+export interface CalendarTask {
+  id: string;
+  title: string;
+  priority: TaskPriority;
+  assigneeId?: string;
+  estimatedTime?: string; // ej. "4h"
+  status: TaskStatus;
+  dueDate?: Date;
+  acceptanceCriteria?: AcceptanceCriterion[];
+}
+export interface TaskCalendarProps {
+  tasks: CalendarTask[];
+  members: CalendarMember[];
+  title?: string;
+  /** id del integrante que usa la app; habilita el filtro "Solo las mías" */
+  currentMemberId?: string;
+  onTaskClick?: (task: CalendarTask) => void;
+}
+/* ---------- Constantes ---------- */
+const STATUS: Record<TaskStatus, { label: string; cls: string }> = {
+  todo: { label: "Por Hacer", cls: "tc-status--todo" },
+  "first-tasks": { label: "Primeras tareas", cls: "tc-status--primary" },
+  "in-progress": { label: "En Proceso", cls: "tc-status--primary" },
+  review: { label: "En Revisión", cls: "tc-status--review" },
+  done: { label: "Completada", cls: "tc-status--done" },
+};
+const PRIORITIES: { key: TaskPriority; label: string }[] = [
+  { key: "alta", label: "Prioridad Alta" },
+  { key: "media", label: "Prioridad Media" },
+  { key: "baja", label: "Prioridad Baja" },
+];
+/* ---------- Progreso (criterios de aceptación) ---------- */
+function units(task: CalendarTask) {
+  const items = task.acceptanceCriteria || [];
+  return items.length
+Calendario de tareas · página 2
+    ? { total: items.length, completed: items.filter((i) => i.completed).length }
+}
+    : { total: 1, completed: task.status === "done" ? 1 : 0 };
+export function taskProgress(task: CalendarTask) {
+  const u = units(task);
+  return Math.round((u.completed / u.total) * 100);
+}
+export function tasksProgress(tasks: CalendarTask[]) {
+  const u = tasks.reduce(
+    (s, t) => {
+      const n = units(t);
+      return { total: s.total + n.total, completed: s.completed + n.completed };
+    },
+    { total: 0, completed: 0 },
+  );
+  return u.total ? Math.round((u.completed / u.total) * 100) : 0;
+}
+/* ---------- Iconos ---------- */
+const Icon = ({ d, size = 16 }: { d: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+const ICONS = {
+  left: "M15 18l-6-6 6-6",
+  right: "M9 18l6-6-6-6",
+  clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
+  alert: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01",
+  users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 
+    4 0 0 1 0 7.75",
+};
+/* ---------- Componente ---------- */
+export function TaskCalendar({
+  tasks,
+  members,
+  title = "Calendario de actividades",
+  currentMemberId,
+  onTaskClick,
+}: TaskCalendarProps) {
+  const [scope, setScope] = useState<"all" | "mine">("all");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const today0 = startOfDay(new Date());
+  const memberById = (id?: string) => members.find((m) => m.id === id);
+  const visible = tasks.filter(
+    (t) =>
+      t.dueDate &&
+      (scope === "all" || (Boolean(currentMemberId) && t.assigneeId === currentMemberId)),
+  );
+  const tasksForDay = (day: Date) => visible.filter((t) => isSameDay(t.dueDate!, day));
+  const weekTasks = visible.filter((t) => weekDays.some((d) => isSameDay(t.dueDate!, d)));
+  const weekDone = weekTasks.filter((t) => t.status === "done").length;
+  const isOverdue = (t: CalendarTask) =>
+    !!t.dueDate && isBefore(t.dueDate, today0) && t.status !== "done";
+  const overdueCount = visible.filter(isOverdue).length;
+  return (
+    <div className="tc">
+      {/* Encabezado */}
+      <div className="tc-header">
+        <div className="tc-title">
+          <div className="tc-symbol"><Icon d={ICONS.users} size={24} /></div>
+          <div>
+            <h1>{title}</h1>
+            <p>
+              {format(weekStart, "d 'de' MMM", { locale: es })} —{" "}
+              {format(addDays(weekStart, 6), "d 'de' MMM yyyy", { locale: es })}
+            </p>
+          </div>
+        </div>
+        <div className="tc-actions">
+Calendario de tareas · página 3
+          <div className="tc-stats">
+            <div>
+              <small>Esta semana</small>
+              <strong>{weekDone}/{weekTasks.length}</strong>
+            </div>
+            {overdueCount > 0 && (
+              <div className="tc-stats__overdue">
+                <small>Vencidas</small>
+                <strong>{overdueCount}</strong>
+              </div>
+            )}
+          </div>
+          <button className="tc-btn" onClick={() => setCurrentDate(new Date())}>Hoy</button>
+          <div className="tc-nav">
+            <button aria-label="Semana anterior" onClick={() => setCurrentDate((d) => addDays(d, -7))}>
+              <Icon d={ICONS.left} />
+            </button>
+            <button aria-label="Semana siguiente" onClick={() => setCurrentDate((d) => addDays(d, 7))}>
+              <Icon d={ICONS.right} />
+            </button>
+          </div>
+        </div>
+      </div>
+      {/* Filtros */}
+      <div className="tc-toolbar">
+        <div role="group" aria-label="Filtro de tareas" className="tc-segment">
+          {([
+            { key: "all", label: "Todo el equipo" },
+            { key: "mine", label: "Solo las mías" },
+          ] as const).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              aria-pressed={scope === item.key}
+              className={scope === item.key ? "is-active" : ""}
+              onClick={() => setScope(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span className="tc-muted tc-push">Progreso visible: {tasksProgress(visible)}%</span>
+      </div>
+      {scope === "mine" && !currentMemberId && (
+        <p className="tc-muted">No hay un integrante vinculado (pasa la prop currentMemberId).</p>
+      )}
+      {/* Cuadrícula semanal */}
+      <div className="tc-grid-wrap">
+        <div className="tc-grid tc-grid--head">
+          {weekDays.map((day) => {
+            const count = tasksForDay(day).length;
+            return (
+              <div key={day.toISOString()} className={`tc-dayhead ${isToday(day) ? "is-today" : ""}`}>
+                <small>{format(day, "EEE", { locale: es })}</small>
+                <div className="tc-daynum">{format(day, "d")}</div>
+                <div className="tc-dots">
+                  {Array.from({ length: Math.min(count, 4) }).map((_, i) => <span key={i} />)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="tc-grid tc-grid--body">
+          {weekDays.map((day) => {
+            const dayTasks = tasksForDay(day);
+            return (
+              <div key={day.toISOString()} className={`tc-daycol ${isToday(day) ? "is-today" : ""}`}>
+                {dayTasks.map((task) => {
+                  const status = STATUS[task.status];
+                  const member = memberById(task.assigneeId);
+                  const overdue = isOverdue(task);
+                  const pct = taskProgress(task);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`tc-card ${task.status === "done" ? "is-done" : ""} ${overdue ? "is-overdue" : ""}`}
+Calendario de tareas · página 4
+                    >
+                      onClick={() => onTaskClick?.(task)}
+                      role={onTaskClick ? "button" : undefined}
+                      tabIndex={onTaskClick ? 0 : undefined}
+                      <p className="tc-card__title">{task.title}</p>
+                      <div className="tc-card__progress">
+                        <small>{pct}% · Progreso</small>
+                        <div className="tc-bar"><div style={{ width: `${pct}%` }} /></div>
+                      </div>
+                      <div className="tc-card__meta">
+                        <Icon d={ICONS.clock} size={11} />
+                        {task.estimatedTime && <small>{task.estimatedTime} estimadas</small>}
+                        <span className={`tc-prio tc-prio--${task.priority}`} title={`Prioridad ${task.priority}`} />
+                      </div>
+                      <div className="tc-card__row">
+                        <span className={`tc-status ${status.cls}`}>{status.label}</span>
+                        {overdue && (
+                          <span className="tc-overdue-icon" aria-label="Vencida"><Icon d={ICONS.alert} size={14} /></span>
+                        )}
+                      </div>
+                      {member && (
+                        <div className="tc-card__member">
+                          <span className="tc-avatar tc-avatar--sm" style={{ backgroundColor: member.color }}>
+                            {member.initials[0]}
+                          </span>
+                          <small>{member.name}</small>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {dayTasks.length === 0 && <div className="tc-empty"><span /></div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {/* Leyenda */}
+      <div className="tc-legend">
+        <p className="tc-legend__label">Integrantes del equipo</p>
+        <div className="tc-legend__members">
+          {members.map((m) => (
+            <div key={m.id} className="tc-legend__member">
+              <span className="tc-avatar" style={{ backgroundColor: m.color }}>{m.initials}</span>
+              <span>{m.name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="tc-legend__prios">
+          {PRIORITIES.map((p) => (
+            <div key={p.key}><span className={`tc-prio tc-prio--${p.key}`} />{p.label}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+export default TaskCalendar;
