@@ -1,78 +1,67 @@
 # OmniCanal Salud Digna
 
-Backend en C# con ASP.NET Core MVC y .NET 10. PostgreSQL almacena pacientes, casos y eventos. Redis está integrado como caché distribuida y ya tiene una comprobación de conectividad. Las consultas de negocio aún no usan la caché.
+Backend en C# con ASP.NET Core MVC y .NET 10. PostgreSQL guarda pacientes, casos y eventos. Redis está conectado como caché distribuida. Las consultas de negocio todavía no usan la caché.
 
-## 1. Instala los requisitos
+## 1. Instala los requisitos en Windows
 
-- SDK de .NET 10. Comprueba que esté instalado con `dotnet --list-sdks`.
-- PostgreSQL. El proyecto se ha probado con PostgreSQL 14.
-- Redis para probar la caché distribuida. El backend puede arrancar mientras Redis está apagado.
+- **SDK de .NET 10.** Instala el SDK y verifica la versión con `dotnet --list-sdks`. [Descargar .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)
+- **PostgreSQL.** Usa el instalador para Windows. Conserva el puerto `5432` si está libre y guarda la contraseña que elijas para el usuario `postgres`. El instalador incluye pgAdmin. Si ya tienes una instancia local de PostgreSQL, puedes usarla. [Instalador de PostgreSQL para Windows](https://www.postgresql.org/download/windows/)
+- **Docker Desktop**, si vas a ejecutar Redis localmente. Inícialo con contenedores Linux. El backend puede arrancar mientras Redis está apagado. [Redis en Docker](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/)
 
-En macOS con Homebrew, instala solo los servicios que te falten:
+Abre PowerShell en la carpeta del repositorio que contiene `Backend` y `dotnet-tools.json`. Restaura la herramienta local de EF Core y los paquetes NuGet:
 
-```bash
-brew install postgresql@14 redis
-```
-
-Si ya tienes PostgreSQL escuchando en `localhost:5432`, puedes usar esa instancia. Para iniciar la instalación de Homebrew cuando la necesites:
-
-```bash
-brew services start postgresql@14
-brew services run redis
-```
-
-`brew services run redis` lo inicia para esta sesión. Puedes apagarlo con `brew services stop redis`. El perfil de desarrollo espera Redis en `127.0.0.1:6379`.
-
-Desde la raíz del repositorio, restaura la herramienta local de EF Core y los paquetes del proyecto:
-
-```bash
+```powershell
 dotnet tool restore
 dotnet restore Backend
 ```
 
-Entity Framework Core, Npgsql y el proveedor de caché Redis se restauran desde NuGet con el proyecto.
+La restauración instala las dependencias del proyecto, incluidas Entity Framework Core, Npgsql y el proveedor de caché Redis.
 
 ## 2. Configura User Secrets
 
-El proyecto ya tiene un `UserSecretsId`. Configura la cadena de PostgreSQL en el almacén de desarrollo de tu usuario, fuera del repositorio.
+El proyecto ya tiene un `UserSecretsId`. Ejecuta estos comandos para crear el archivo con una cadena de ejemplo y abrirlo en el Bloc de notas. Si ya configuraste la conexión, conserva la cadena existente y abre el archivo directamente.
 
-Si tu PostgreSQL local acepta el mismo usuario de macOS sin contraseña:
+```powershell
+dotnet user-secrets set "ConnectionStrings:SaludDigna" "Host=localhost;Port=5432;Database=Salud Digna;Username=postgres;Password=TU_CONTRASEÑA" --project Backend
 
-```bash
-dotnet user-secrets set "ConnectionStrings:SaludDigna" \
-  "Host=localhost;Port=5432;Database=Salud Digna;Username=$USER" \
-  --project Backend
+[xml]$project = Get-Content -Raw '.\Backend\SaludDigna.Backend.csproj'
+$secretsId = $project.SelectSingleNode('//UserSecretsId').InnerText
+notepad (Join-Path $env:APPDATA "Microsoft\UserSecrets\$secretsId\secrets.json")
 ```
 
-Si tu instalación requiere otro usuario o contraseña, ajusta la cadena en `secrets.json`. En macOS puedes encontrarlo en `~/.microsoft/usersecrets/<UserSecretsId>/secrets.json`. El identificador está en `Backend/SaludDigna.Backend.csproj`. Si tu servidor Redis usa otra dirección o requiere credenciales, configura allí también `ConnectionStrings:Redis`.
+En el archivo, sustituye `TU_CONTRASEÑA` por la contraseña de PostgreSQL. Ajusta también `Username` o `Port` si tu instancia usa otros valores. El archivo queda fuera del repositorio, en `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`. [User Secrets en ASP.NET Core](https://learn.microsoft.com/es-es/aspnet/core/security/app-secrets?tabs=windows&view=aspnetcore-10.0)
 
 ## 3. Crea la base y aplica la migración
 
-Con PostgreSQL en marcha, ejecuta estos comandos desde la raíz del repositorio:
+Con PostgreSQL en marcha, ejecuta en PowerShell:
 
-```bash
+```powershell
+$env:DOTNET_ENVIRONMENT = 'Development'
 dotnet build Backend
-DOTNET_ENVIRONMENT=Development dotnet tool run dotnet-ef database update --project Backend --no-build
+dotnet tool run dotnet-ef database update --project Backend --no-build
 ```
 
-EF Core crea la base si hace falta y aplica la migración inicial con las tablas `patients`, `cases` y `events`. Para que EF Core pueda crear la base, el rol de PostgreSQL necesita permiso `CREATEDB`. Si el rol carece de ese permiso, el administrador debe crear la base y dar al rol permisos para aplicar las migraciones en ella.
+EF Core crea la base `Salud Digna` si aún no existe y aplica la migración que crea `patients`, `cases` y `events`. Si usas un rol con permisos limitados, pide al administrador de PostgreSQL que cree la base y le conceda permisos para aplicar las migraciones. Puedes verificar las tablas en pgAdmin bajo **Databases → Salud Digna → Schemas → public → Tables**.
 
-Puedes verificar las tablas con el usuario y nombre de base que configuraste:
+## 4. Inicia Redis
 
-```bash
-psql -h localhost -p 5432 -U "$USER" -d "Salud Digna" -c '\dt'
+Con Docker Desktop abierto, crea el contenedor una sola vez. El puerto queda publicado en la interfaz local de Windows:
+
+```powershell
+docker run -d --name salud-digna-redis -p 127.0.0.1:6379:6379 redis:8
+docker exec salud-digna-redis redis-cli ping
 ```
 
-Si instalaste PostgreSQL 14 con Homebrew y tu terminal no encuentra `psql`, usa `"$(brew --prefix postgresql@14)/bin/psql"` en su lugar.
+La segunda orden debe devolver `PONG`. Si el contenedor ya existe, enciéndelo con `docker start salud-digna-redis`. Para apagarlo, ejecuta `docker stop salud-digna-redis`. La configuración de desarrollo usa `127.0.0.1:6379`. Si tu instancia usa otra dirección o requiere credenciales, guarda la conexión en User Secrets con la clave `ConnectionStrings:Redis`.
 
-## 4. Arranca y verifica el backend
+## 5. Arranca y verifica el backend
 
-```bash
+```powershell
 dotnet run --project Backend
 ```
 
-- [Inicio](http://localhost:5080/) muestra la página MVC.
+- [Página inicial](http://localhost:5080/) muestra la vista MVC.
 - [Salud del backend](http://localhost:5080/health) confirma que el proceso responde.
-- [Salud de Redis](http://localhost:5080/health/redis) devuelve HTTP 200 si la caché responde y HTTP 503 si está configurada pero no está disponible. También puedes probar Redis con `redis-cli ping`.
+- [Salud de Redis](http://localhost:5080/health/redis) devuelve HTTP 200 si Redis responde y HTTP 503 si está apagado o no se puede conectar.
 
-Si el puerto HTTP `5080` está ocupado, arranca con `dotnet run --project Backend -- --urls http://localhost:5081` y usa ese puerto en las comprobaciones. PostgreSQL y Redis conservan sus propios puertos.
+Para detener el backend, pulsa **Ctrl+C** en la terminal. Si el puerto HTTP `5080` está ocupado, puedes arrancar con `dotnet run --project Backend -- --urls http://localhost:5081` y abrir las mismas rutas en `5081`.
