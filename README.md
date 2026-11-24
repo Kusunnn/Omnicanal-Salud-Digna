@@ -38,6 +38,10 @@ dotnet run --project Backend
 
 Para reutilizar el contenedor, ejecuta `docker start salud-digna-redis`. Comprueba el [backend](http://localhost:5080/health), [Redis](http://localhost:5080/health/redis) y el [catálogo](http://localhost:5080/api/tipos-consulta).
 
+## Chatbot de WhatsApp
+
+La carpeta `Chatbot` tiene un bot de WhatsApp (Node.js) que muestra los servicios de `ConsultationCatalog.cs` con botones y listas. Las instrucciones para prenderlo están en [Chatbot/README.md](Chatbot/README.md).
+
 ## Prueba rápida en Thunder Client
 
 Usa `http://localhost:5080` y conserva la cookie de sesión. Las credenciales son de prueba y funcionan con el perfil `Development`.
