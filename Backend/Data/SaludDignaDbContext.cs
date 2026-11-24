@@ -19,7 +19,10 @@ public sealed class SaludDignaDbContext(DbContextOptions<SaludDignaDbContext> op
             patient.Property(p => p.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             patient.Property(p => p.NombreCompleto).HasColumnName("nombre_completo").HasMaxLength(200);
             patient.Property(p => p.Telefono).HasColumnName("telefono").HasMaxLength(16);
-            patient.Property(p => p.Curp).HasColumnName("curp").HasMaxLength(18);
+            patient.Property(p => p.Curp).HasColumnName("curp").HasMaxLength(18).IsRequired();
+            patient.Property(p => p.FechaNacimiento).HasColumnName("fecha_nacimiento");
+            patient.Property(p => p.LugarNacimiento).HasColumnName("lugar_nacimiento").HasMaxLength(100);
+            patient.Property(p => p.Sexo).HasColumnName("sexo").HasMaxLength(20);
             patient.Property(p => p.Correo).HasColumnName("correo").HasMaxLength(254);
             patient.Property(p => p.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
             patient.HasIndex(p => p.Telefono).HasDatabaseName("ix_patients_telefono");

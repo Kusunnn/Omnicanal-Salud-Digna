@@ -43,6 +43,18 @@ dotnet tool run dotnet-ef database update --project Backend --no-build
 
 EF Core crea la base `Salud Digna` si aún no existe y aplica la migración que crea `patients`, `cases` y `events`. Si usas un rol con permisos limitados, pide al administrador de PostgreSQL que cree la base y le conceda permisos para aplicar las migraciones. Puedes verificar las tablas en pgAdmin bajo **Databases → Salud Digna → Schemas → public → Tables**.
 
+### Carga opcional de pacientes ficticios
+
+Aplica primero las migraciones. La migración de pacientes requiere una CURP para cada registro. Si una base existente tiene pacientes con CURP nula, completa sus datos con los valores correctos antes de volver a ejecutarla.
+
+En pgAdmin, selecciona la base `Salud Digna`, abre **Query Tool**, carga `Backend/Data/Seeds/pacientes-ficticios.sql` y ejecútalo. También puedes hacerlo desde PowerShell si tienes `psql` en el PATH:
+
+```powershell
+psql -h localhost -p 5432 -U postgres -d 'Salud Digna' -v ON_ERROR_STOP=1 -f '.\Backend\Data\Seeds\pacientes-ficticios.sql'
+```
+
+El script agrega 200 pacientes ficticios y se puede volver a ejecutar sin duplicarlos. Las claves con prefijo `DEMO` son identificadores de prueba. Ejecuta el script en una base de desarrollo.
+
 ## 4. Inicia Redis
 
 Con Docker Desktop abierto, crea el contenedor una sola vez. El puerto queda publicado en la interfaz local de Windows:

@@ -98,15 +98,30 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasDefaultValueSql("now()");
 
                     b.Property<string>("Curp")
+                        .IsRequired()
                         .HasMaxLength(18)
                         .HasColumnType("character varying(18)")
                         .HasColumnName("curp");
+
+                    b.Property<DateOnly?>("FechaNacimiento")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_nacimiento");
+
+                    b.Property<string>("LugarNacimiento")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("lugar_nacimiento");
 
                     b.Property<string>("NombreCompleto")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("nombre_completo");
+
+                    b.Property<string>("Sexo")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sexo");
 
                     b.Property<string>("Telefono")
                         .IsRequired()

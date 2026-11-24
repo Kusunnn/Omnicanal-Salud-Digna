@@ -5,7 +5,10 @@ public sealed class Patient
     public Guid Id { get; init; }
     public required string NombreCompleto { get; set; }
     public required string Telefono { get; set; }
-    public string? Curp { get; set; }
+    public required string Curp { get; set; }
+    public DateOnly? FechaNacimiento { get; set; }
+    public string? LugarNacimiento { get; set; }
+    public string? Sexo { get; set; }
     public string? Correo { get; set; }
     public DateTime CreatedAt { get; private set; }
 }
