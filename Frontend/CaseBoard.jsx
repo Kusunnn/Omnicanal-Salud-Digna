@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Headset, LayoutDashboard, LockKeyhole, Monitor, MapPin, RefreshCw, Search, Stethoscope } from 'lucide-react';
+import { LayoutDashboard, LockKeyhole, Monitor, MapPin, Search, Stethoscope } from 'lucide-react';
 
 const columns = [
   { id: 'EN_PROGRESO', title: 'En progreso', color: 'progress' },
@@ -8,8 +8,8 @@ const columns = [
 ];
 
 export function CaseBoard({ cases, visibleCases, search, onSearch, channel, onChannel,
-  channels, channelName, service, titleFor, selected, authorized, role, busy, personal,
-  onRefresh, onOpen, onContinue }) {
+  channels, channelName, service, titleFor, authorized, role, busy, personal,
+  onContinue }) {
   return <section className="board" aria-label="Canvas de casos">
     <div className="boardToolbar">
       <div className="boardTitle"><LayoutDashboard size={20}/><div><h2>{personal ? "Mis casos" : "Casos de atención"}</h2>
@@ -21,7 +21,6 @@ export function CaseBoard({ cases, visibleCases, search, onSearch, channel, onCh
           <option value="">Todos los canales</option>
           {channels.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
-        <button className="quiet" onClick={onRefresh} disabled={busy}><RefreshCw size={16}/>Actualizar</button>
       </div> : <a className="primary boardLogin" href="#acceso"><LockKeyhole size={16}/>Acceder al tablero</a>}
     </div>
     <div className="boardLanes">
@@ -30,15 +29,13 @@ export function CaseBoard({ cases, visibleCases, search, onSearch, channel, onCh
         return <section className={'boardLane ' + column.color} key={column.id} aria-label={column.title}>
           <div className="laneHeading"><h3><i aria-hidden="true"/>{column.title}</h3><span>{authorized ? items.length : '—'}</span></div>
           {items.length === 0 && <p className="laneEmpty">{authorized ? 'Sin casos en esta columna' : 'Inicia sesión para ver los casos'}</p>}
-          {items.map(item => <article className={'boardCard ' + (selected?.id === item.id ? 'selected' : '')} key={item.id}>
+          {items.map(item => <article className="boardCard" key={item.id}>
             <div className="cardMeta"><span>{channelName(item.ultimoCanal)}</span><small>#{item.id.slice(0, 8).toUpperCase()}</small></div>
-            <button className="cardOpen" onClick={() => onOpen(item)} disabled={busy}>
-              <Stethoscope size={18}/><strong>{item.datos?.estudio || service(item)}</strong><ArrowUpRight size={16}/>
-            </button>
+            <div className="cardOpen"><Stethoscope size={16}/><strong>{item.datos?.estudio || service(item)}</strong></div>
             <p className="cardStep">{titleFor(item)}</p>
             {item.datos?.clinica && <p className="cardClinic"><MapPin size={14}/>{item.datos.clinica}</p>}
             {item.datos?.fecha && <p className="cardClinic">{item.datos.fecha}{item.datos.horario ? ' · ' + item.datos.horario.slice(0, 5) : ''}</p>}
-            {(personal || role === 'ASESOR') && item.estado !== 'COMPLETADO' && <button className="quiet cardContinue" onClick={() => onContinue(item, personal ? 'WEB' : 'CALL_CENTER')} disabled={busy}>{personal ? <Monitor size={16}/> : <Headset size={16}/>} {personal ? "Continuar en Web" : "Continuar en Call Center"}</button>}
+            {(personal || role === 'ASESOR') && item.estado !== 'COMPLETADO' && <button className="quiet cardContinue" onClick={() => onContinue(item)} disabled={busy}><Monitor size={15}/> Continuar en Web</button>}
           </article>)}
         </section>;
       })}

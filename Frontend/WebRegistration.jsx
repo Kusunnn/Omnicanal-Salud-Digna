@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CalendarDays, ChevronLeft, ClipboardList, MapPin, MessageCircle } from 'lucide-react';
 
-export function WebRegistration({ item, onBack, onComplete }) {
+export function WebRegistration({ item, onBack, onComplete, operator = false }) {
   const [date, setDate] = useState(item.datos.fecha ?? '');
   const [time, setTime] = useState(item.datos.horario ?? '');
   const [sex, setSex] = useState('');
@@ -19,7 +19,7 @@ export function WebRegistration({ item, onBack, onComplete }) {
   }
 
   return <main className="webRegister">
-    <button className="quiet" onClick={onBack}><ChevronLeft size={17}/> Mis procesos</button>
+    <button className="quiet" onClick={onBack}><ChevronLeft size={17}/> {operator ? "Volver al tablero" : "Mis procesos"}</button>
     <div className="registerLayout">
       <aside className="registerInfo">
         <p className="eyebrow">ESTUDIOS Y CITAS</p>
@@ -27,16 +27,16 @@ export function WebRegistration({ item, onBack, onComplete }) {
         <p>Retoma el prerregistro de tu estudio y elige cuándo quieres acudir a la clínica.</p>
         <div className="registerSummaryCard">
           <MessageCircle size={24}/>
-          <div><strong>Prerregistro iniciado en WhatsApp</strong><p>Ya tienes una clínica seleccionada.</p></div>
+          <div><strong>{operator ? "Prerregistro del paciente" : "Prerregistro iniciado en WhatsApp"}</strong><p>{item.datos.clinica ? "La clínica ya está seleccionada." : "La clínica está pendiente."}</p></div>
         </div>
         <h2>Datos de tu cita</h2>
-        <p className="registerClinic"><MapPin size={19}/>{item.datos.clinica}</p>
+        <p className="registerClinic"><MapPin size={19}/>{item.datos.clinica || "Clínica pendiente"}</p>
         <p>Selecciona fecha y horario para continuar. Usa datos ficticios en esta simulación.</p>
       </aside>
       <section className="registrar panel">
         <div className="registerTab"><ClipboardList size={22}/> Prerregistro</div>
         <form className="registerForm" onSubmit={submit}>
-          <div className="registerLocation"><MapPin size={20}/><span><small>Clínica seleccionada</small><strong>{item.datos.clinica}</strong></span></div>
+          <div className="registerLocation"><MapPin size={20}/><span><small>Clínica seleccionada</small><strong>{item.datos.clinica || "Clínica pendiente"}</strong></span></div>
           <h2>Elige fecha y horario</h2>
           <div className="fieldGrid">
             <label>Fecha<input required type="date" value={date} onChange={e => setDate(e.target.value)}/></label>
