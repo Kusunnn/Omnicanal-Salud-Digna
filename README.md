@@ -40,7 +40,7 @@ Para reutilizar el contenedor, ejecuta `docker start salud-digna-redis`. Comprue
 
 ## Chatbot de WhatsApp
 
-La carpeta `Chatbot` tiene un bot de WhatsApp (Node.js) que muestra los servicios de `ConsultationCatalog.cs` con botones y listas. Las instrucciones para prenderlo están en [Chatbot/README.md](Chatbot/README.md).
+La carpeta `Chatbot` tiene un bot de WhatsApp (Node.js) que identifica al paciente con su número de WhatsApp y su fecha de nacimiento, le muestra los trámites pendientes de cualquier canal para continuarlos, y deja iniciar trámites propios o para familiares con los servicios de `ConsultationCatalog.cs`. Usa los endpoints `/api/chatbot`, que requieren configurar `Chatbot:ApiKey` en User Secrets. Las instrucciones para prenderlo están en [Chatbot/README.md](Chatbot/README.md).
 
 ## Prueba rápida en Thunder Client
 

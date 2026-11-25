@@ -97,7 +97,108 @@ const asesor = "💬 En un momento te atiende un asesor. Gracias por tu pacienci
 const gracias = "😊 Con gusto. Escribe *menu* si necesitas algo más.";
 const noEntendi = "🤔 No te entendí. Toca *Menú principal* o escribe el nombre de un servicio.";
 
+// ---------------------------------------------------------------
+// Identificacion del paciente
+// ---------------------------------------------------------------
+const bienvenidaIdentificar = "👋 Hola, soy el asistente de Salud Digna.\n¿De quién son los trámites que quieres ver?";
+const botonMios = "Míos, este número"; // maximo 20 caracteres
+const botonOtroNumero = "Usar otro número"; // maximo 20 caracteres
+const pideFecha = "🔒 Para proteger tus datos, escribe tu fecha de nacimiento.\nEjemplo: 15/03/1990";
+const fechaInvalida = "🤔 No entendí la fecha. Escríbela así: 15/03/1990 (día/mes/año).";
+// Nunca decir cual dato fallo (asi nadie averigua que numeros son pacientes)
+const fechaNoCoincide = (restantes) =>
+  `❌ Los datos no coinciden. Revisa tu fecha de nacimiento e inténtalo de nuevo.\n` +
+  (restantes === 1 ? "Te queda 1 intento." : `Te quedan ${restantes} intentos.`);
+const bloqueado = (minutos) =>
+  `🔒 Por seguridad no puedo mostrar tus trámites ahora.\nPuedes intentarlo de nuevo en ${minutos} minutos.\nMientras tanto puedes:`;
+const otroNumero =
+  "🔒 Por seguridad, tus trámites solo se pueden ver desde el WhatsApp con el que te registraste.\nDesde este celular puedes:";
+const botonVerServicios = "📋 Ver servicios";
+const identificateDeNuevo = "🔒 Para continuar con tus trámites necesito confirmar que eres tú.";
+
+// ---------------------------------------------------------------
+// Paciente identificado
+// ---------------------------------------------------------------
+const saludoVerificado = (nombre) => `✅ ¡Listo${nombre ? `, ${nombre}` : ""}!`;
+const tienesPendientes = (n) => (n === 1 ? "Tienes 1 trámite pendiente:" : `Tienes ${n} trámites pendientes:`);
+const sinPendientes = "No tienes trámites pendientes.";
+const botonPendientes = "Ver pendientes"; // maximo 20 caracteres
+const paraTi = "Para ti";
+const opcionNuevo = "➕ Trámite nuevo"; // maximo 24
+const opcionSalir = "🚪 Cerrar sesión"; // maximo 24
+const paraQuien = "¿Para quién es la cita?";
+const botonParaMi = "🙋 Para mí";
+const botonParaFamiliar = "👥 Para un familiar";
+const servicioParaMi = "¿Qué servicio necesitas?";
+
+// Citas para familiares
+const preguntaParentesco = "¿Qué es de ti?";
+const parentescos = { HIJO: "👶 Hijo(a)", PADRE_MADRE: "👵 Padre/Madre", OTRO: "👤 Otro familiar" }; // maximo 20
+const pideNombreFamiliar = "Escribe su nombre completo (nombre y apellidos):";
+const nombreInvalido = "🤔 Escribe el nombre completo, solo con letras (nombre y apellidos).";
+const pideCurp = "Ahora escribe su CURP (18 caracteres).\nLa encuentras en su acta de nacimiento o en gob.mx/curp";
+const curpInvalida = "🤔 Esa CURP no parece válida. Revisa que tenga 18 caracteres e inténtalo de nuevo.";
+const servicioParaFamiliar = (nombre) => `¿Qué servicio necesita ${nombre}?`;
+const familiarNoValido = (detalle) => `😕 No pude registrar al familiar: ${detalle}`;
+const paraFamiliar = (parentesco) => `👥 Trámite para: *${parentesco || "tu familiar"}*\n`;
+
+// Continuar tramites
+const canales = { WEB: "la web", WHATSAPP: "WhatsApp", CALL_CENTER: "el call center", APP: "la app", CLINICA: "la clínica" };
+const retomado = (canal) => `🔄 Seguimos con el trámite que empezaste en ${canal}.\n`;
+const casoCambio = "🔄 Este trámite cambió desde otro canal. Este es el paso actual:\n";
+const pasoDesconocido = "Este trámite ya no se puede continuar por aquí. Un asesor te puede ayudar.";
+const botonMisTramites = "🏠 Mis trámites";
+
+// Sesion
+const botonSalir = "🚪 Cerrar sesión";
+const botonEmpezar = "👋 Empezar";
+const sesionCerrada = "🚪 Sesión cerrada. Cuando quieras volver, escribe *hola*.";
+const hastaLuego = "👋 ¡Hasta luego! Cuando quieras volver, escribe *hola*.";
+const sesionVencida = "⏱️ Tu sesión se cerró por inactividad.";
+const errorBackend = "😕 Tuvimos un problema para consultar tus trámites. Inténtalo en un momento.";
+
 module.exports = {
+  bienvenidaIdentificar,
+  botonMios,
+  botonOtroNumero,
+  pideFecha,
+  fechaInvalida,
+  fechaNoCoincide,
+  bloqueado,
+  otroNumero,
+  botonVerServicios,
+  identificateDeNuevo,
+  saludoVerificado,
+  tienesPendientes,
+  sinPendientes,
+  botonPendientes,
+  paraTi,
+  opcionNuevo,
+  opcionSalir,
+  paraQuien,
+  botonParaMi,
+  botonParaFamiliar,
+  servicioParaMi,
+  preguntaParentesco,
+  parentescos,
+  pideNombreFamiliar,
+  nombreInvalido,
+  pideCurp,
+  curpInvalida,
+  servicioParaFamiliar,
+  familiarNoValido,
+  paraFamiliar,
+  canales,
+  retomado,
+  casoCambio,
+  pasoDesconocido,
+  botonMisTramites,
+  botonSalir,
+  botonEmpezar,
+  sesionCerrada,
+  hastaLuego,
+  sesionVencida,
+  errorBackend,
   bienvenida,
   masServicios,
   botonServicios,

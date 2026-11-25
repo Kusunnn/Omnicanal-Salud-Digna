@@ -38,6 +38,8 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
 });
 builder.Services.AddSingleton<CaseCheckpointCache>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ChatbotIdentityAttempts>();
 builder.Services.AddScoped<CheckpointPersistence>();
 builder.Services.AddOptions<CheckpointSyncOptions>()
     .BindConfiguration("CheckpointSync")

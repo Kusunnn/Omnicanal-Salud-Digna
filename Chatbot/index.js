@@ -2,18 +2,38 @@
 // Los textos se cambian en mensajes.js y los servicios salen de catalogo.js.
 
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const { cargarCatalogo } = require("./catalogo");
 const { responder } = require("./flujo");
 
 const app = express();
-app.use(express.json());
+// Guardamos el cuerpo tal cual llego para revisar la firma de Meta
+app.use(express.json({ verify: (req, _res, buffer) => (req.cuerpoOriginal = buffer) }));
 
-const { META_TOKEN, META_PHONE_NUMBER_ID, VERIFY_TOKEN, BACKEND_URL } = process.env;
+const { META_TOKEN, META_PHONE_NUMBER_ID, VERIFY_TOKEN, BACKEND_URL, META_APP_SECRET, CHATBOT_API_KEY } = process.env;
 const PORT = Number(process.env.PORT) || 3000;
 
 if (!META_TOKEN || META_TOKEN === "PEGA_AQUI_TU_TOKEN") {
   console.log("AVISO: falta poner tu token en el archivo .env");
+}
+if (!META_APP_SECRET) {
+  console.log("AVISO: falta META_APP_SECRET en el .env; el bot no puede comprobar que los mensajes vienen de Meta");
+}
+if (!CHATBOT_API_KEY) {
+  console.log("AVISO: falta CHATBOT_API_KEY en el .env; el bot no podrá identificar pacientes en el backend");
+}
+
+// Meta firma cada aviso con el App Secret de tu app (encabezado X-Hub-Signature-256).
+// Si la firma no coincide, alguien que no es Meta mando la peticion y se ignora.
+function firmaValida(req) {
+  if (!META_APP_SECRET) return true; // sin secreto configurado no se puede revisar (solo para pruebas)
+  const firma = req.get("x-hub-signature-256") || "";
+  const esperada =
+    "sha256=" + crypto.createHmac("sha256", META_APP_SECRET).update(req.cuerpoOriginal || "").digest("hex");
+  const a = Buffer.from(firma);
+  const b = Buffer.from(esperada);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // Saca lo que mando la persona: el texto escrito o el id de lo que toco
@@ -38,7 +58,19 @@ app.get("/webhook", (req, res) => {
 
 // Aqui llegan los mensajes que le escriben al bot
 const yaVistos = new Set();
-app.post("/webhook", async (req, res) => {
+const colas = new Map(); // mensajes de un mismo numero se atienden en orden, uno por uno
+
+function enCola(numero, tarea) {
+  const actual = (colas.get(numero) || Promise.resolve()).then(tarea);
+  colas.set(numero, actual);
+  actual.finally(() => colas.get(numero) === actual && colas.delete(numero));
+}
+
+app.post("/webhook", (req, res) => {
+  if (!firmaValida(req)) {
+    console.log("AVISO: llegó una petición al webhook sin la firma de Meta; se ignoró");
+    return res.sendStatus(401);
+  }
   res.sendStatus(200); // contestar rapido para que Meta no reintente
 
   const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -50,8 +82,15 @@ app.post("/webhook", async (req, res) => {
   if (yaVistos.has(msg.id)) return;
   yaVistos.add(msg.id);
 
+  // msg.from es el numero de WhatsApp de quien escribe; lo pone Meta, no la persona
   console.log(`Te escribio ${msg.from}: ${leido.mostrar}`);
-  await enviar(msg.from, responder(leido.valor));
+  enCola(msg.from, async () => {
+    try {
+      await enviar(msg.from, await responder(msg.from, leido.valor));
+    } catch (error) {
+      console.log("No se pudo contestar:", error.message);
+    }
+  });
 });
 
 // 3 opciones o menos -> botones; 4 o mas -> lista. Se puede forzar con tipo.
