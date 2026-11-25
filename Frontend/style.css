@@ -167,3 +167,6 @@ body:has(.workspaceHeader){background:#f3f8f6}
 .staffRegistration .registrar{width:100%}
 
 .verifyPatientForm{margin-top:14px}
+
+.logoHome{display:block;flex:none;padding:0;border:0;background:none;border-radius:4px}
+.logoHome img{display:block}

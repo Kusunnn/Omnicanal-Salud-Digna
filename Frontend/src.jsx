@@ -137,9 +137,18 @@ function App() {
     } else setScreen(screenName);
   }
 
+  function returnToLogin() {
+    if (busy) return;
+    if (registration) {
+      destination.current = 'login';
+      backRef.current?.click();
+    } else window.location.assign('./');
+  }
+
   function closeRegistration(defaultScreen = 'procesos') {
     const screenName = destination.current ?? defaultScreen;
     destination.current = null;
+    if (screenName === 'login') { window.location.assign('./'); return; }
     setRegistration(null);
     setScreen(screenName);
   }
@@ -227,7 +236,7 @@ function App() {
   return <>
     {personal || registration ? <header className="portalMasthead">
       <div className="portalTopLine"><div className="portalHeaderInner">
-        <img src={logo} className="portalLogo" alt="Salud Digna"/>
+        <button type="button" className="logoHome" aria-label="Salud Digna, volver al inicio de sesión" onClick={returnToLogin} disabled={busy}><img src={logo} className="portalLogo" alt=""/></button>
         <div className="portalClinic"><MapPin size={16}/><div><strong>Selecciona una clínica</strong><small>Consulta disponibilidad</small></div><ChevronDown size={14}/></div>
         <div className="portalAudiences"><span className="portalAudienceActive"><UserRound size={14}/> Pacientes</span><span>Personal de atención</span></div>
       </div></div>
@@ -260,7 +269,7 @@ function App() {
         </div>
       </div>
     </header> : <header className="workspaceHeader"><div className="top">
-      <img className="brandLogo" src={logo} alt="Salud Digna" width="166" height="59"/>
+      <button type="button" className="logoHome" aria-label="Salud Digna, volver al inicio de sesión" onClick={returnToLogin} disabled={busy}><img className="brandLogo" src={logo} alt="" width="166" height="59"/></button>
       <div className="headerRight"><span className="demo">Entorno de simulación</span>{personal && session && <button className="quiet" onClick={() => {setSession(null); setRegistration(null);}}>Cambiar sesión</button>}</div>
     </div></header>}
 
