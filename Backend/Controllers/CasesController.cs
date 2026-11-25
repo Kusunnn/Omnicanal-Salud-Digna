@@ -140,7 +140,7 @@ public sealed class CasesController(
     }
 
     [HttpPut("{caseId:guid}/checkpoint")]
-    [Authorize(Roles = "PACIENTE,ASESOR")]
+    [Authorize(Roles = "PACIENTE,ASESOR,ADMIN")]
     public async Task<ActionResult<CaseCheckpoint>> SaveCheckpoint(
         Guid patientId, Guid caseId, SaveCheckpointRequest request, CancellationToken cancellationToken)
     {
@@ -219,7 +219,7 @@ public sealed class CasesController(
     }
 
     [HttpPost("{caseId:guid}/retomar")]
-    [Authorize(Roles = "PACIENTE,ASESOR")]
+    [Authorize(Roles = "PACIENTE,ASESOR,ADMIN")]
     public async Task<ActionResult<CaseCheckpoint>> Resume(
         Guid patientId, Guid caseId, ResumeCaseRequest request, CancellationToken cancellationToken)
     {

@@ -125,3 +125,26 @@ body:has(.workspaceHeader){background:#f3f8fa}
 .portalServicesList button:hover,.portalServicesList button:focus-visible{background:#edf6fd}
 
 .portalTextAction .pendingDot{display:inline-block;flex:none;width:8px;height:8px;margin-left:2px;border-radius:50%;background:#cb2436}
+
+.portalWorkspace .boardLanesTwo{grid-template-columns:repeat(2,minmax(0,1fr))}
+.adminStats{margin-bottom:18px}.adminMetrics,.adminBreakdowns{display:grid;gap:12px;margin-bottom:12px}
+.adminMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}.adminBreakdowns{grid-template-columns:1fr 1fr}
+.adminMetric{display:grid;grid-template-columns:auto 1fr;gap:6px 9px;align-items:center;padding:12px}
+.adminMetric svg{color:#146a9d}.adminMetric span{font-size:.85rem}.adminMetric strong{grid-column:2;font-size:1.5rem;line-height:1}
+.adminBreakdown ol{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}.adminBreakdown li>div{display:flex;justify-content:space-between;gap:8px}
+.adminBreakdown meter{width:100%;height:10px;accent-color:#1671a7}.adminScope{font-size:.85rem}
+@media(max-width:650px){.adminMetrics{grid-template-columns:1fr 1fr}.adminBreakdowns{grid-template-columns:1fr}.portalWorkspace .boardLanesTwo{grid-template-columns:repeat(2,minmax(145px,1fr))}}
+
+.workspaceHeader{border-bottom-color:#24846a}
+.workspaceHeader .demo{background:#e9f5ee;color:#26624f}
+body:has(.workspaceHeader){background:#f3f8f6}
+.staffWorkspace .eyebrow,.staffWorkspace .boardTitle>svg{color:#146c54}
+.staffWorkspace .boardLane.progress{background:#edf7f3;border-color:#cce5db;--lane:#238268}
+.staffWorkspace .boardLane.done{background:#eef8f2;border-color:#d0e7db}
+.staffWorkspace .adminMetric:nth-child(odd) svg{color:#168060}
+.staffWorkspace .adminMetric:nth-child(odd){border-color:#cee5db;background:#f5fbf8}
+.staffWorkspace .patientFinder .primary{background:#147258}
+.staffWorkspace .patientFinder .primary:hover{background:#105b46}
+
+.internalFooter{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.internalFooter .staffFooterLink{margin:0}

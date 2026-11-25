@@ -1,5 +1,5 @@
-export async function api(path, method = 'GET', body) {
-  const response = await fetch('/api' + path, {
+export async function api(path, method = 'GET', body, basePath = '/api') {
+  const response = await fetch(basePath + path, {
     method, credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChevronDown, MapPin, Search, Ticket, UserRound } from 'lucide-react';
 import { CaseBoard } from './CaseBoard';
+import { AdminStats } from './AdminStats';
 import { WebCaseFlow } from './WebCaseFlow';
 import { ServicesHome, webServices } from './ServicesHome';
 import { api as backendApi, casesPath, casePath } from './backendClient';
@@ -9,7 +10,7 @@ import { demoApi } from './demoClient';
 import logo from './salud-digna-logo.png';
 import './style.css';
 
-const api = import.meta.env.VITE_USE_BACKEND === 'true' ? backendApi : demoApi;
+const backendEnabled = import.meta.env.VITE_USE_BACKEND === 'true';
 
 const channels = [
   ['WEB', 'Portal web'], ['WHATSAPP', 'WhatsApp'],
@@ -23,7 +24,10 @@ const demoPatient = {
 const searchablePatient = text => text.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 function App() {
-  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get('vista') === 'operador' ? 'OPERADOR' : 'PACIENTE');
+  const [view] = useState(() => {
+    const route = new URLSearchParams(window.location.search).get('vista');
+    return route === 'admin' ? 'ADMIN' : route === 'operador' ? 'OPERADOR' : 'PACIENTE';
+  });
   const [demoEmail, setDemoEmail] = useState('');
   const [session, setSession] = useState(null);
   const [cases, setCases] = useState([]);
@@ -40,7 +44,13 @@ function App() {
   const [error, setError] = useState('');
 
   const personal = view === 'PACIENTE';
-  const authorized = !personal || session;
+  const admin = view === 'ADMIN';
+  const api = backendEnabled
+    ? (path, method, body) => backendApi(path, method, body, admin ? '/admin-api' : '/api')
+    : demoApi;
+  const backRef = useRef(null);
+  const [nextService, setNextService] = useState(null);
+  const authorized = admin ? session?.rol === 'ADMIN' : !personal || session?.rol === 'PACIENTE';
   const service = item => item.datos?.estudio ?? 'Consulta';
   const stepNames = { inicio: 'Inicio', cotizado: 'Cotización guardada', 'clinica-seleccionada': 'Clínica seleccionada', 'horario-seleccionado': 'Horario seleccionado', 'cita-confirmada': 'Cita confirmada' };
   const titleFor = item => stepNames[item.pasoActual] ?? item.pasoActual;
@@ -60,14 +70,14 @@ function App() {
 
   const patientId = session?.patientId;
   useEffect(() => {
-    if (!patientId || registration || busy) return;
+    if ((admin ? !authorized : !patientId) || registration || busy) return;
     let active = true;
     let pending = false;
     async function refresh() {
       if (pending) return;
       pending = true;
       try {
-        const result = await api(casesPath(patientId) + '?incluirCompletados=true');
+        const result = await api(admin ? '/tablero/casos?limite=100' : casesPath(patientId) + '?incluirCompletados=true');
         if (active) setCases(result);
       } catch (exception) {
         if (active) setError(exception.message);
@@ -76,11 +86,15 @@ function App() {
     void refresh();
     const timer = setInterval(refresh, 3000);
     return () => { active = false; clearInterval(timer); };
-  }, [patientId, registration, busy]);
+  }, [admin, authorized, patientId, registration, busy]);
 
   useEffect(() => {
-    if (!personal && !session) void run(async () => setSession(await demoSession()));
-  }, [personal, session]);
+    if (admin && !session) {
+      void run(async () => setSession(await api(backendEnabled ? '/demo/session' : '/demo/identidad/personal', 'POST', { rol: 'ADMIN' })));
+    } else if (!personal && !admin && !session) {
+      void run(async () => setSession(await demoSession()));
+    }
+  }, [personal, admin, session]);
 
   function findPatients(event) {
     event.preventDefault();
@@ -92,19 +106,6 @@ function App() {
   function filterPatient(patient) {
     setPatientFilter(patient);
   }
-  function navigate(next) {
-    setView(next);
-    setServicesOpen(false);
-    setScreen('servicios');
-    setRegistration(null);
-    setDemoEmail('');
-    setSearch('');
-    setPatientQuery('');
-    setPatientResults(null);
-    setPatientFilter(null);
-    setNotice('');
-  }
-
   function signIn(event) {
     event.preventDefault();
     setNotice('');
@@ -113,6 +114,20 @@ function App() {
   function updateCase(item) {
     setCases(current => current.some(existing => existing.id === item.id)
       ? current.map(existing => existing.id === item.id ? item : existing) : [item, ...current]);
+  }
+
+  useEffect(() => {
+    if (!nextService || registration || busy) return;
+    setNextService(null);
+    chooseService(nextService.tipoConsultaId, nextService.estudio);
+  }, [nextService, registration, busy]);
+
+  function selectService(tipoConsultaId, estudio) {
+    if (busy) return;
+    if (!registration) return chooseService(tipoConsultaId, estudio);
+    setServicesOpen(false);
+    setNextService({ tipoConsultaId, estudio });
+    backRef.current?.click();
   }
 
   function chooseService(tipoConsultaId, estudio) {
@@ -165,7 +180,10 @@ function App() {
     });
   }
   const query = search.trim().toLowerCase();
-  const visibleCases = cases.filter(item => (!patientFilter || item.patientId === patientFilter.id) && [item.id, item.patientId, service(item), item.datos?.estudio, item.datos?.clinica].some(value => value?.toLowerCase().includes(query)));
+  const confirmedSteps = ['cita-confirmada', 'cita-confirmada-con-pago', 'resumen-cita', 'resumen-cita-con-pago',
+    'resumen-requisitos', 'resumen-visita', 'resumen-estudios'];
+  const boardCases = cases.map(item => confirmedSteps.includes(item.pasoActual) ? { ...item, estado: 'COMPLETADO' } : item);
+  const visibleCases = boardCases.filter(item => (!patientFilter || item.patientId === patientFilter.id) && [item.id, item.patientId, service(item), item.datos?.estudio, item.datos?.clinica].some(value => value?.toLowerCase().includes(query)));
 
   const hasPendingCases = cases.some(item => item.patientId === patientId && item.estado !== 'COMPLETADO'
     && !['cita-confirmada', 'cita-confirmada-con-pago', 'resumen-cita', 'resumen-cita-con-pago',
@@ -181,8 +199,10 @@ function App() {
       <div className="portalHeaderInner portalMenu">
         <div className="portalSearch"><span>Buscar estudios o paquetes</span><Search size={16}/></div>
         <div className="portalMenuItems">
-                    <span>Inicio</span>
-          {session && !registration ? <div className="portalServicesMenu" onBlur={event => {
+                    {session ? <button type="button" className="portalTextAction" disabled={Boolean(registration)}
+            onClick={() => {setScreen('servicios'); setServicesOpen(false); setError('');}}
+            aria-current={!registration && screen === 'servicios' ? 'page' : undefined}>Inicio</button> : <span>Inicio</span>}
+          {personal && session ? <div className="portalServicesMenu" onBlur={event => {
             if (!event.currentTarget.contains(event.relatedTarget)) setServicesOpen(false);
           }} onKeyDown={event => {
             if (event.key === 'Escape' && servicesOpen) {
@@ -194,7 +214,7 @@ function App() {
               onClick={() => setServicesOpen(open => !open)}>Servicios <ChevronDown size={13}/></button>
             <ul id="menu-servicios" className="portalServicesList" hidden={!servicesOpen}>
               {webServices.map(({ id, nombre, Icon }) => <li key={id}>
-                <button type="button" disabled={busy} onClick={() => chooseService(id, nombre)}><Icon size={17}/>{nombre}</button>
+                <button type="button" disabled={busy} onClick={() => selectService(id, nombre)}><Icon size={17}/>{nombre}</button>
               </li>)}
             </ul>
           </div> : <span>Servicios <ChevronDown size={13}/></span>}
@@ -205,11 +225,9 @@ function App() {
         </div>
       </div>
     </header> : <header className="workspaceHeader"><div className="top">
-      <button className="brand" onClick={() => navigate('PACIENTE')}><img className="brandLogo" src={logo} alt="Salud Digna" width="166" height="59"/></button>
+      <img className="brandLogo" src={logo} alt="Salud Digna" width="166" height="59"/>
       <div className="headerRight"><span className="demo">Entorno de simulación</span>{personal && session && <button className="quiet" onClick={() => {setSession(null); setRegistration(null);}}>Cambiar sesión</button>}</div>
-    </div><nav aria-label="Vistas de atención">
-      {[['PACIENTE', 'Paciente', UserRound]].map(([id, name, Icon]) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={17}/>{name}</button>)}
-    </nav></header>}
+    </div></header>}
 
     {personal && !authorized ? <main className="patientAccess">
       <div className="patientAccessShell">
@@ -236,34 +254,36 @@ function App() {
       </section>
       </div>
     </main> : registration ? <WebCaseFlow key={registration.id} item={registration}
-      busy={busy} error={error} onSave={saveCheckpoint}
+      busy={busy} error={error} onSave={saveCheckpoint} backRef={backRef}
       onBack={data => {if (data) saveCheckpoint(data, false, true); else {setRegistration(null); setScreen('procesos'); setError('');}}}/> :
-      personal && screen === 'servicios' ? <ServicesHome onChoose={chooseService} busy={busy} error={error}/> :<main className="portalWorkspace">
+      personal && screen === 'servicios' ? <ServicesHome onChoose={chooseService} busy={busy} error={error}/> :<main className={personal ? "portalWorkspace" : "portalWorkspace staffWorkspace"}>
       <section className="intro">
         <div><span className="eyebrow">{personal ? 'ATENCIÓN AL PACIENTE' : 'OPERACIÓN OMNICANAL'}</span>
-          <h1>{personal ? "Mis procesos" : "Tablero de Call Center"}</h1>
-          <p>{personal ? "Consulta y continúa tus trámites." : "Busca al paciente y retoma su atención."}</p></div>
+          <h1>{personal ? "Mis procesos" : admin ? "Panel de administración" : "Tablero de Call Center"}</h1>
+          <p>{personal ? "Consulta y continúa tus trámites." : admin ? "Revisa el avance por paso y canal, y continúa los casos pendientes." : "Busca al paciente y retoma su atención."}</p></div>
       </section>
       {error && <p role="alert" className="message error">{error}</p>}
       {notice && <p role="status" className="message success">{notice}</p>}
-      {!personal && authorized && <section className="panel patientFinder" aria-label="Buscador de pacientes">
+      {!personal && !admin && authorized && <section className="panel patientFinder" aria-label="Buscador de pacientes">
         <form onSubmit={findPatients}><label>Buscar paciente<input required maxLength={200} value={patientQuery} onChange={e => {setPatientQuery(e.target.value); setPatientResults(null);}} placeholder="Nombre, CURP, teléfono con lada o identificador"/></label>
           <button className="primary" disabled={busy || !patientId || !patientQuery.trim()}>Buscar</button></form>
         {patientResults?.length === 0 && <p>No se encontraron pacientes.</p>}
         {patientResults?.length > 0 && <ul>{patientResults.map(patient => <li key={patient.id}><button className="quiet" onClick={() => filterPatient(patient)}>{patient.nombreCompleto} · {patient.id.slice(0, 8)}</button></li>)}</ul>}
         {patientFilter && <div className="actions"><strong>{patientFilter.nombreCompleto}</strong><button className="quiet" onClick={() => filterPatient(null)}>Ver todos los casos</button></div>}
       </section>}
-      <CaseBoard cases={authorized ? cases : []} visibleCases={authorized ? visibleCases : []}
+      {admin && !authorized ? <p role="status">{busy ? "Conectando con el tablero…" : "La sesión de administración local no está disponible."}</p> : <>
+      {admin && <AdminStats cases={boardCases} titleFor={titleFor} channelName={channelName}/>}
+      <CaseBoard cases={authorized ? boardCases : []} visibleCases={authorized ? visibleCases : []}
         search={search} onSearch={setSearch} channel={boardChannel} onChannel={setBoardChannel}
         channels={channels} channelName={channelName} service={service} titleFor={titleFor}
-        personal={personal} authorized={authorized} role="ASESOR" busy={busy}
-        onContinue={continueInWeb}/>
+        personal={personal} admin={admin} authorized={authorized} role={admin ? "ADMIN" : "ASESOR"} busy={busy}
+        onContinue={continueInWeb}/></>}
     </main>}
     {patientSignIn ? <footer className="patientFooter">
       <div><strong>Portal de atención</strong><p>Consulta y seguimiento de trámites</p></div>
-      <div><strong>Canales</strong><p>Portal web · Call Center</p><a className="quiet staffFooterLink" href="?vista=operador">Acceso de operador</a></div>
+      <div><strong>Canales</strong><p>Portal web · Call Center</p><a className="quiet staffFooterLink" href="?vista=operador">Acceso de operador</a> <a className="quiet staffFooterLink" href="?vista=admin">Administración</a></div>
       <small>Prototipo HackaTec · Entorno de simulación</small>
-    </footer> : <footer>Prototipo HackaTec</footer>}
+    </footer> : <footer className={!personal ? "internalFooter" : undefined}><span>Prototipo HackaTec</span>{!personal && !registration && <a className="quiet staffFooterLink" href="./">Volver a inicio</a>}</footer>}
   </>;
 }
 createRoot(document.getElementById('root')).render(<App/>);

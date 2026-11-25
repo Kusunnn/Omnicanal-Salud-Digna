@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ClipboardList, MapPin, MessageCircle } from 'lucide-react';
 
-export function WebRegistration({ item, onBack, onComplete, operator = false, busy = false, saveError, onAutoSave, submitLabel = "Generar prerregistro" }) {
+export function WebRegistration({ item, onBack, onComplete, operator = false, backRef, busy = false, saveError, onAutoSave, submitLabel = "Generar prerregistro" }) {
   const [clinic, setClinic] = useState(item.datos.clinica ?? '');
   const [date, setDate] = useState(item.datos.fecha ?? '');
   const [time, setTime] = useState(item.datos.horario?.slice(0, 5) ?? '');
@@ -45,7 +45,7 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, bu
   }
 
   return <main className="webRegister">
-    <button className="quiet" onClick={() => {window.clearTimeout(timer.current); onBack(hasChanges ? progressData() : undefined);}} disabled={busy}><ChevronLeft size={17}/> {operator ? "Volver al tablero" : "Mis procesos"}</button>
+    <button ref={backRef} className="quiet" onClick={() => {window.clearTimeout(timer.current); onBack(hasChanges ? progressData() : undefined);}} disabled={busy}><ChevronLeft size={17}/> {operator ? "Volver al tablero" : "Mis procesos"}</button>
     <div className="registerLayout">
       <aside className="registerInfo">
         <p className="eyebrow">ESTUDIOS Y CITAS</p>

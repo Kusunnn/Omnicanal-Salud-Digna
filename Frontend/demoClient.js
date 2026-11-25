@@ -29,7 +29,9 @@ function saveCase(cases, item) {
 
 export async function demoApi(path, method = 'GET', body = {}) {
   if (path === '/demo/identidad/paciente' && method === 'POST') return { patientId, rol: 'PACIENTE' };
+  if (path === '/demo/identidad/personal' && method === 'POST' && body.rol === 'ADMIN') return { rol: 'ADMIN' };
   const route = path.split('?')[0];
+  if (route === '/tablero/casos' && method === 'GET') return readCases().slice(0, 100);
   const match = route.match(/^\/pacientes\/([^/]+)\/casos(?:\/([^/]+))?(?:\/(checkpoint|retomar))?$/);
   if (!match || match[1] !== patientId) throw new Error('Ruta de demostración no disponible.');
 

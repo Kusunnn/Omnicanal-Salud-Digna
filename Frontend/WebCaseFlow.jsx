@@ -2,17 +2,17 @@ import React from 'react';
 import { ChevronLeft, MapPin } from 'lucide-react';
 import { WebRegistration } from './WebRegistration';
 
-export function WebCaseFlow({ item, onBack, onSave, busy, error }) {
+export function WebCaseFlow({ item, onBack, backRef, onSave, busy, error }) {
   const step = item.pasoActual;
   const review = ['pago-pendiente', 'pago-confirmado'].includes(step);
   if (['inicio', 'cotizado', 'clinica-seleccionada', 'horario-seleccionado'].includes(step)) {
-    return <WebRegistration item={item} onBack={onBack} busy={busy} saveError={error}
+    return <WebRegistration item={item} onBack={onBack} backRef={backRef} busy={busy} saveError={error}
       submitLabel="Confirmar cita simulada"
       onAutoSave={data => onSave(data, false)}
       onComplete={data => onSave(data, true)}/>;
   }
   return <main className="webRegister">
-    <button className="quiet" onClick={onBack} disabled={busy}><ChevronLeft size={17}/> Mis procesos</button>
+    <button ref={backRef} className="quiet" onClick={onBack} disabled={busy}><ChevronLeft size={17}/> Mis procesos</button>
     <div className="registerLayout">
       <aside className="registerInfo"><p className="eyebrow">ESTUDIOS Y CITAS</p><h1>{item.datos.estudio}</h1>
         <p>El avance de este trámite está disponible en los canales conectados.</p>
