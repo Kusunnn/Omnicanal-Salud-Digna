@@ -22,7 +22,8 @@ internal sealed record CheckpointChange(
     string? CanalAnterior = null,
     Guid? InteraccionId = null,
     string? ActorId = null,
-    Guid? EventId = null)
+    Guid? EventId = null,
+    string[]? CamposActualizados = null)
 {
     public string Resumen => TipoEvento == "CASO_RETOMADO"
         ? "Se retomó el caso en otro canal."

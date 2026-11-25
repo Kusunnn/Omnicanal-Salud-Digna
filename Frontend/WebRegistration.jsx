@@ -1,22 +1,53 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ClipboardList, MapPin, MessageCircle } from 'lucide-react';
 
+const localClinics = ['Chihuahua Nueva España', 'Culiacán Centro', 'Clínica Demo'];
+const localTimes = ['08:00', '09:30', '11:00'];
+
+function registrationDraft(data) {
+  return {
+    nombres: data?.nombres ?? '',
+    apellidoPaterno: data?.apellidoPaterno ?? '',
+    apellidoMaterno: data?.apellidoMaterno ?? '',
+    nacimiento: data?.nacimiento ?? null,
+    sexo: data?.sexo ?? null,
+    correo: data?.correo ?? '',
+    whatsapp: data?.whatsapp ?? '',
+  };
+}
+
 export function WebRegistration({ item, onBack, onComplete, operator = false, backRef, busy = false, saveError, onAutoSave, submitLabel = "Generar prerregistro" }) {
   const [recipient, setRecipient] = useState(item.datos.parentesco ?? '');
   const forSelf = /^para m[ií]$/i.test(recipient);
   const [clinic, setClinic] = useState(item.datos.clinica ?? '');
+  const [clinics, setClinics] = useState(localClinics);
+  const [horarios, setHorarios] = useState(localTimes);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/clinicas', { signal: controller.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(options => { if (Array.isArray(options) && !controller.signal.aborted) setClinics(options.map(option => option.nombre)); })
+      .catch(() => {});
+    fetch('/api/horarios', { signal: controller.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(options => { if (Array.isArray(options) && !controller.signal.aborted) setHorarios(options); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
   const [date, setDate] = useState(item.datos.fecha ?? '');
   const [time, setTime] = useState(item.datos.horario?.slice(0, 5) ?? '');
-  const [sex, setSex] = useState('');
-  const [phone, setPhone] = useState('');
+  const [draft, setDraft] = useState(() => registrationDraft(item.datos.prerregistro));
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const attempted = useRef(null);
   const saveRef = useRef(onAutoSave);
   saveRef.current = onAutoSave;
   const timer = useRef(null);
-  const draftKey = JSON.stringify([clinic, date, time, recipient]);
-  const savedKey = JSON.stringify([item.datos.clinica ?? '', item.datos.fecha ?? '', item.datos.horario?.slice(0, 5) ?? '', item.datos.parentesco ?? '']);
+  const draftKey = JSON.stringify([clinic, date, time, recipient, draft]);
+  const savedKey = JSON.stringify([
+    item.datos.clinica ?? '', item.datos.fecha ?? '', item.datos.horario?.slice(0, 5) ?? '',
+    item.datos.parentesco ?? '', registrationDraft(item.datos.prerregistro),
+  ]);
   const hasChanges = draftKey !== savedKey;
 
   useEffect(() => {
@@ -33,12 +64,19 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
   }, [draftKey, hasChanges, busy]);
 
   function progressData() {
-    return Object.fromEntries(Object.entries({ clinica: clinic, fecha: date, horario: time, parentesco: recipient }).filter(([, value]) => value));
+    const appointment = Object.fromEntries(Object.entries({
+      clinica: clinic, fecha: date, horario: time, parentesco: recipient,
+    }).filter(([, value]) => value));
+    return { ...appointment, prerregistro: draft };
+  }
+
+  function setField(field, value) {
+    setDraft(previous => ({ ...previous, [field]: value }));
   }
 
   function submit(event) {
     event.preventDefault();
-    if (phone.trim() !== confirmation.trim()) {
+    if (draft.whatsapp.trim() !== confirmation.trim()) {
       setError('Los números de WhatsApp deben coincidir.');
       return;
     }
@@ -73,35 +111,34 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
           </fieldset>
           <label>Clínica<select required value={clinic} onChange={e => setClinic(e.target.value)}>
             <option value="">Selecciona una clínica</option>
-            <option>Chihuahua Nueva España</option><option>Culiacán Centro</option>
-            {item.datos.clinica && !['Chihuahua Nueva España', 'Culiacán Centro'].includes(item.datos.clinica) && <option>{item.datos.clinica}</option>}
+            {clinics.map(nombre => <option key={nombre}>{nombre}</option>)}
+            {clinic && !clinics.includes(clinic) && <option>{clinic}</option>}
           </select></label>
           <h2>Elige fecha y horario</h2>
           <div className="fieldGrid">
             <label>Fecha<input required type="date" value={date} onChange={e => setDate(e.target.value)}/></label>
-            <label>Horario<select required value={time} onChange={e => setTime(e.target.value)}><option value="">Selecciona un horario</option><option value="08:00">08:00</option><option value="09:30">09:30</option><option value="11:00">11:00</option></select></label>
+            <label>Horario<select required value={time} onChange={e => setTime(e.target.value)}><option value="">Selecciona un horario</option>{horarios.map(hora => <option key={hora}>{hora}</option>)}{time && !horarios.includes(time) && <option>{time}</option>}</select></label>
           </div>
           <hr/>
           <h2>Datos de la persona que se hará el estudio</h2>
           <div className="fieldGrid">
-            <label>Nombre(s)<input required name="nombres" placeholder="Nombre(s)"/></label>
-            <label>Apellido paterno<input required name="apellidoPaterno" placeholder="Apellido paterno"/></label>
-            <label>Apellido materno (opcional)<input name="apellidoMaterno" placeholder="Apellido materno"/></label>
-            <label>Fecha de nacimiento<input required name="nacimiento" type="date"/></label>
+            <label>Nombre(s)<input required name="nombres" maxLength={100} value={draft.nombres} onChange={e => setField('nombres', e.target.value)} placeholder="Nombre(s)"/></label>
+            <label>Apellido paterno<input required name="apellidoPaterno" maxLength={100} value={draft.apellidoPaterno} onChange={e => setField('apellidoPaterno', e.target.value)} placeholder="Apellido paterno"/></label>
+            <label>Apellido materno (opcional)<input name="apellidoMaterno" maxLength={100} value={draft.apellidoMaterno} onChange={e => setField('apellidoMaterno', e.target.value)} placeholder="Apellido materno"/></label>
+            <label>Fecha de nacimiento<input required name="nacimiento" type="date" value={draft.nacimiento ?? ''} onChange={e => setField('nacimiento', e.target.value || null)}/></label>
           </div>
           <fieldset className="registerSex"><legend>Sexo</legend>
-            {['Mujer', 'Hombre'].map(option => <label key={option}><input type="radio" name="sexo" value={option} checked={sex === option} onChange={() => setSex(option)} required/>{option}</label>)}
+            {['Mujer', 'Hombre'].map(option => <label key={option}><input type="radio" name="sexo" value={option} checked={draft.sexo === option} onChange={() => setField('sexo', option)} required/>{option}</label>)}
           </fieldset>
-          <label>Correo electrónico<input required type="email" placeholder="nombre@ejemplo.com"/></label>
+          <label>Correo electrónico<input required type="email" maxLength={254} placeholder="nombre@ejemplo.com" value={draft.correo} onChange={e => setField('correo', e.target.value)}/></label>
           <div className="fieldGrid">
-            <label>WhatsApp<input required type="tel" value={phone} onChange={e => {setPhone(e.target.value); setError('');}}/></label>
+            <label>WhatsApp<input required type="tel" maxLength={32} value={draft.whatsapp} onChange={e => {setField('whatsapp', e.target.value); setError('');}}/></label>
             <label>Confirma WhatsApp<input required type="tel" value={confirmation} onChange={e => {setConfirmation(e.target.value); setError('');}}/></label>
           </div>
           <h2>Resumen</h2>
           <dl className="registerReceipt"><div><dt>Estudio</dt><dd>{item.datos.estudio}</dd></div><div><dt><CalendarDays size={15}/> Fecha y horario</dt><dd>{date ? [date, time].filter(Boolean).join(' · ') : 'Por seleccionar'}</dd></div><div><dt>Precio</dt><dd>Simulado</dd></div></dl>
-          <label className="registerConsent"><input required type="checkbox"/> Confirmo que estoy usando datos ficticios.</label>
           {(error || saveError) && <p role="alert" className="message error">{error || saveError}</p>}
-          <p role="status">{busy ? "Guardando avance…" : hasChanges ? "Cambios por guardar" : "El avance se guarda automáticamente."}</p>
+          {(busy || hasChanges) && <p role="status">{busy ? "Guardando avance…" : "Cambios por guardar"}</p>}
           <div className="actions registerSubmit">
             <button className="patientSubmit" disabled={busy}>{submitLabel}</button>
           </div>

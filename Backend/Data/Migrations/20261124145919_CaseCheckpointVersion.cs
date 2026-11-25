@@ -4,10 +4,8 @@
 
 namespace SaludDigna.Backend.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class CaseCheckpointVersion : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -24,8 +22,6 @@ namespace SaludDigna.Backend.Data.Migrations
                 nullable: false,
                 defaultValue: 1);
         }
-
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

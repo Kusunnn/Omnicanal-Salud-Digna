@@ -71,7 +71,7 @@ body:has(.portalMasthead){background:#fff}
 .registerInfo{padding:20px 0}.registerInfo h2{margin-top:22px}.registerInfo p{margin-block:8px}.registerSummaryCard,.registerLocation,.registerClinic{display:flex;align-items:center;gap:12px}.registerSummaryCard{background:#e8f5fa;border:1px solid #c7e0ec;border-radius:12px;padding:15px;margin-top:23px;color:#155d86}.registerSummaryCard p{margin:2px 0 0}
 .registrar{padding:0;overflow:hidden}.registerTab{display:flex;align-items:center;gap:9px;background:#eaf5ff;border-bottom:3px solid #1975ad;color:#125c8a;padding:13px 20px;font-weight:750}
 .registerForm{padding:clamp(15px,3vw,25px);display:grid;gap:14px}.registerForm h2{font-size:1.1rem}.registerForm hr{width:100%;border:0;border-top:1px solid var(--border);margin:4px 0}.registerLocation{padding:10px 12px;border:1px solid #91bfdc;border-radius:6px;color:#146394}.registerLocation small,.registerLocation strong{display:block}
-.registerSex{border:0;margin:0;padding:0;display:flex;gap:10px}.registerSex legend{padding:0;font-size:.9rem;font-weight:600;margin-bottom:4px}.registerSex label,.registerConsent{display:flex;align-items:center;gap:6px}.registerSex label{padding:6px 10px;border:1px solid var(--border);border-radius:6px}.registerSex input,.registerConsent input{width:auto}.registerReceipt{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px;padding:11px;background:#f2f7fa;border-radius:7px;margin:0}.registerReceipt dt{display:flex;align-items:center;gap:4px;font-size:.83rem}.registerReceipt dd{margin:2px 0 0}.registerSubmit{justify-self:end}
+.registerSex{border:0;margin:0;padding:0;display:flex;gap:10px}.registerSex legend{padding:0;font-size:.9rem;font-weight:600;margin-bottom:4px}.registerSex label{display:flex;align-items:center;gap:6px}.registerSex label{padding:6px 10px;border:1px solid var(--border);border-radius:6px}.registerSex input{width:auto}.registerReceipt{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px;padding:11px;background:#f2f7fa;border-radius:7px;margin:0}.registerReceipt dt{display:flex;align-items:center;gap:4px;font-size:.83rem}.registerReceipt dd{margin:2px 0 0}.registerSubmit{justify-self:end}
 @media(max-width:760px){.registerLayout{grid-template-columns:1fr;gap:10px}.registerInfo{padding:0}}
 
 .workspaceHeader{border-bottom:2px solid #267cac;box-shadow:0 2px 5px #18394b12}
@@ -170,3 +170,17 @@ body:has(.workspaceHeader){background:#f3f8f6}
 
 .logoHome{display:block;flex:none;padding:0;border:0;background:none;border-radius:4px}
 .logoHome img{display:block}
+
+.boardCard .cardMeta .cardHistory{display:inline-flex;align-items:center;justify-content:center;min-width:34px;min-height:34px;padding:4px;margin-left:2px}
+.caseTimelineDialog{width:min(600px,calc(100% - 32px));max-height:min(82vh,720px);padding:0;border:1px solid var(--border);border-radius:13px;color:inherit}
+.caseTimelineDialog::backdrop{background:#102a3c75}
+.caseTimelineHeader{display:flex;justify-content:space-between;align-items:start;gap:12px;padding:18px 22px;background:#ebf5fc;border-bottom:1px solid var(--border)}
+.caseTimelineHeader h2,.caseTimelineHeader p{margin:0}
+.caseTimelineHeader p{margin-top:4px}
+.caseTimelineBody{padding:16px 22px 22px}
+.caseTimelineList{list-style:none;margin:12px 0 0;padding-left:14px;border-left:2px solid var(--border)}
+.caseTimelineList li{position:relative;padding:0 0 18px 10px}
+.caseTimelineList li:last-child{padding-bottom:0}
+.caseTimelineList li::before{position:absolute;left:-20px;top:8px;width:10px;height:10px;border-radius:50%;background:#1f7e67;content:""}
+.caseTimelineMeta{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:5px;font-size:.85rem}
+.caseTimelineList p{margin:3px 0}

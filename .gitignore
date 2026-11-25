@@ -1,12 +1,9 @@
 .DS_Store
 **/bin/
-/Backend/bin\\*/
 **/obj/
-
+/Backend/bin\\*/
+node_modules/
+/Frontend/dist/
 .env
 .env.*
-
-node_modules/
-.env
-# La plantilla si se sube (el .gitignore de la raiz ignora .env.*)
 !.env.example

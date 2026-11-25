@@ -1,6 +1,3 @@
-// Chatbot de WhatsApp (Cloud API de Meta) para OmniCanal Salud Digna.
-// Los textos se cambian en mensajes.js y los servicios salen de catalogo.js.
-
 require("dotenv").config();
 const crypto = require("crypto");
 const express = require("express");
@@ -8,7 +5,6 @@ const { cargarCatalogo } = require("./catalogo");
 const { responder } = require("./flujo");
 
 const app = express();
-// Guardamos el cuerpo tal cual llego para revisar la firma de Meta
 app.use(express.json({ verify: (req, _res, buffer) => (req.cuerpoOriginal = buffer) }));
 
 const { META_TOKEN, META_PHONE_NUMBER_ID, VERIFY_TOKEN, BACKEND_URL, META_APP_SECRET, CHATBOT_API_KEY } = process.env;
@@ -23,11 +19,8 @@ if (!META_APP_SECRET) {
 if (!CHATBOT_API_KEY) {
   console.log("AVISO: falta CHATBOT_API_KEY en el .env; el bot no podrá identificar pacientes en el backend");
 }
-
-// Meta firma cada aviso con el App Secret de tu app (encabezado X-Hub-Signature-256).
-// Si la firma no coincide, alguien que no es Meta mando la peticion y se ignora.
 function firmaValida(req) {
-  if (!META_APP_SECRET) return true; // sin secreto configurado no se puede revisar (solo para pruebas)
+  if (!META_APP_SECRET) return true;
   const firma = req.get("x-hub-signature-256") || "";
   const esperada =
     "sha256=" + crypto.createHmac("sha256", META_APP_SECRET).update(req.cuerpoOriginal || "").digest("hex");
@@ -35,18 +28,14 @@ function firmaValida(req) {
   const b = Buffer.from(esperada);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
-
-// Saca lo que mando la persona: el texto escrito o el id de lo que toco
 function leerMensaje(msg) {
-  if (msg.type === "text") return { valor: msg.text.body, mostrar: msg.text.body };
+  if (msg.type === "text") return { valor: msg.text?.body, mostrar: "[texto]" };
   if (msg.type === "interactive") {
     const r = msg.interactive?.button_reply || msg.interactive?.list_reply;
     if (r) return { valor: r.id, mostrar: `[${msg.interactive.list_reply ? "lista" : "boton"}] ${r.title}` };
   }
   return null;
 }
-
-// Meta revisa que la direccion es tuya (se hace una vez al configurar el webhook)
 app.get("/webhook", (req, res) => {
   if (req.query["hub.verify_token"] === VERIFY_TOKEN) {
     console.log("Meta verifico el webhook correctamente");
@@ -55,10 +44,8 @@ app.get("/webhook", (req, res) => {
   console.log("Intento de verificacion con token incorrecto");
   res.sendStatus(403);
 });
-
-// Aqui llegan los mensajes que le escriben al bot
 const yaVistos = new Set();
-const colas = new Map(); // mensajes de un mismo numero se atienden en orden, uno por uno
+const colas = new Map();
 
 function enCola(numero, tarea) {
   const actual = (colas.get(numero) || Promise.resolve()).then(tarea);
@@ -68,22 +55,18 @@ function enCola(numero, tarea) {
 
 app.post("/webhook", (req, res) => {
   if (!firmaValida(req)) {
-    console.log("AVISO: llegó una petición al webhook sin la firma de Meta; se ignoró");
+    console.warn("Webhook rechazado: falta la firma de Meta o es inválida.");
     return res.sendStatus(401);
   }
-  res.sendStatus(200); // contestar rapido para que Meta no reintente
+  res.sendStatus(200);
 
   const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
   const leido = leerMensaje(msg);
-  if (!leido) return;
-
-  // Meta a veces manda el mismo mensaje dos veces; lo ignoramos
+  if (!leido?.valor || !msg.from) return;
   if (yaVistos.has(msg.id)) return;
   yaVistos.add(msg.id);
-
-  // msg.from es el numero de WhatsApp de quien escribe; lo pone Meta, no la persona
-  console.log(`Te escribio ${msg.from}: ${leido.mostrar}`);
+  console.log(`WhatsApp • ${msg.from.slice(-4)}: ${leido.mostrar}`);
   enCola(msg.from, async () => {
     try {
       await enviar(msg.from, await responder(msg.from, leido.valor));
@@ -92,15 +75,11 @@ app.post("/webhook", (req, res) => {
     }
   });
 });
-
-// 3 opciones o menos -> botones; 4 o mas -> lista. Se puede forzar con tipo.
 function esLista({ tipo, opciones }) {
   if (tipo === "lista") return true;
   if (tipo === "botones") return false;
   return opciones.length > 3;
 }
-
-// Avisa en la terminal si algo pasa de los limites de WhatsApp
 function revisarLimites(respuesta) {
   const { opciones = [], boton } = respuesta;
   const avisar = (cosa, texto, max) => {
@@ -119,8 +98,6 @@ function revisarLimites(respuesta) {
     for (const o of opciones) avisar("el boton", o.titulo, 20);
   }
 }
-
-// Junta las opciones por seccion (en el orden en que aparecen) para la lista
 function agruparSecciones(opciones) {
   const secciones = [];
   for (const o of opciones) {
@@ -131,8 +108,6 @@ function agruparSecciones(opciones) {
   }
   return secciones;
 }
-
-// Arma el mensaje para WhatsApp: lista, botones de un clic o texto normal
 function armarMensaje(numero, respuesta) {
   const { texto, opciones = [], boton } = respuesta;
   const base = { messaging_product: "whatsapp", to: numero };
@@ -162,10 +137,7 @@ function armarMensaje(numero, respuesta) {
     },
   };
 }
-
-// Manda un mensaje por WhatsApp
 async function enviar(numero, respuesta) {
-  // Los numeros de Mexico llegan como 521..., pero se envian como 52...
   if (numero.startsWith("521") && numero.length === 13) numero = "52" + numero.slice(3);
 
   try {
@@ -179,10 +151,16 @@ async function enviar(numero, respuesta) {
     });
 
     const data = await res.json();
-    if (data.error) console.log("Error de Meta:", data.error.message);
-    else console.log("Respuesta enviada");
+    if (!res.ok || data.error) {
+      console.warn("Error de Meta:", {
+        status: res.status,
+        code: data.error?.code,
+        subcode: data.error?.error_subcode,
+        mensaje: data.error?.message,
+        traza: data.error?.fbtrace_id,
+      });
+    } else console.log("Respuesta enviada");
   } catch (err) {
-    // Si falla internet o Meta, el bot avisa pero no se apaga
     console.log("No se pudo enviar el mensaje:", err.cause?.code || err.message);
   }
 }
@@ -190,8 +168,7 @@ async function enviar(numero, respuesta) {
 cargarCatalogo(BACKEND_URL).then((cantidad) => {
   console.log(`Catálogo cargado del backend: ${cantidad} servicios`);
   app.listen(PORT, () => {
-    console.log(`Chatbot prendido en http://localhost:${PORT}`);
-    console.log(`Siguiente paso: en otra terminal corre  ngrok http ${PORT}`);
+    console.log(`Chatbot escuchando en http://localhost:${PORT}`);
   });
 }).catch((error) => {
   console.error("No se pudo cargar el catálogo. Inicia el backend y revisa BACKEND_URL.");

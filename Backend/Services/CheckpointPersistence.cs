@@ -72,6 +72,7 @@ public sealed class CheckpointPersistence(SaludDignaDbContext database)
             pasoAnterior = change.PasoAnterior,
             pasoActual = change.PasoActual,
             canalAnterior = change.CanalAnterior,
+            camposActualizados = change.CamposActualizados,
             version = change.Version
         });
 }

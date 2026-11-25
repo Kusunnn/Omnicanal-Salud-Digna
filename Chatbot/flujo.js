@@ -1,23 +1,10 @@
-// Decide que contestar.
-//
-// 1. Al iniciar, el bot pregunta de quien son los tramites:
-//    - "Mios, este numero": usa el numero de WhatsApp (lo pone Meta, no se puede falsificar)
-//      y pide la fecha de nacimiento. El backend lleva la cuenta: 3 fallos = 15 min bloqueado.
-//    - "Usar otro numero": por seguridad no muestra datos personales; solo catalogo o asesor.
-// 2. Ya identificado, muestra sus tramites pendientes de cualquier canal (web, call center...)
-//    y los de familiares que el pidio, para continuarlos desde el paso donde se quedaron.
-// 3. Puede iniciar un tramite para el o para un familiar.
-//
-// Sin identificarse (invitado) el catalogo funciona como antes y no guarda nada: el id de cada
-// boton lleva el servicio y el paso (por ejemplo "cp:ultrasonido:cotizado").
-
-const { obtenerServicios, buscarServicio, buscarPaso } = require("./catalogo");
+const { obtenerServicios, buscarServicio, buscarPaso, obtenerClinicas, obtenerHorarios } = require("./catalogo");
 const backend = require("./backend");
 const sesiones = require("./sesiones");
 const m = require("./mensajes");
 
-const POR_PAGINA = 9; // 9 opciones + "Ver más servicios" = 10 (maximo de una lista)
-const MAX_PENDIENTES = 8; // 8 tramites + "Trámite nuevo" + "Cerrar sesión" = 10
+const POR_PAGINA = 9;
+const MAX_PENDIENTES = 8;
 
 const BOTON_MENU = { id: "menu", titulo: m.botonMenu };
 const BOTON_ASESOR = { id: "asesor", titulo: m.botonAsesor };
@@ -27,8 +14,6 @@ const BOTON_EMPEZAR = { id: "inicio", titulo: m.botonEmpezar };
 
 const SALUDOS = ["hola", "inicio", "buenas", "buenos dias", "buenas tardes", "buenas noches"];
 const CURP = /^([A-Z][AEIOUX][A-Z]{2}\d{6}[HMX][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[A-Z\d]\d|DEMO\d{14})$/;
-
-// Minusculas, sin acentos ni espacios extra (para comparar lo que escribe la persona)
 const normalizar = (texto) =>
   texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
@@ -38,15 +23,11 @@ const rellenar = (texto, servicio) =>
 const recortar = (texto, max) => (texto.length > max ? texto.slice(0, max - 1) + "…" : texto);
 const conPrefijo = (prefijo, respuesta) =>
   prefijo ? { ...respuesta, texto: `${prefijo}\n\n${respuesta.texto}` } : respuesta;
-
-// WhatsApp manda "5216671234567" (Mexico con 1). En la base de datos esta como "+526671234567".
 function telefonoE164(numero) {
   const digitos = String(numero).replace(/\D/g, "");
   if (/^521\d{10}$/.test(digitos)) return "+52" + digitos.slice(3);
   return "+" + digitos;
 }
-
-// "15/03/1990", "15-3-1990" o "15.03.1990" -> "1990-03-15" (null si no es una fecha real)
 function leerFecha(texto) {
   const partes = texto.trim().match(/^(\d{1,2})\s*[/\-. ]\s*(\d{1,2})\s*[/\-. ]\s*(\d{4})$/);
   if (!partes) return null;
@@ -56,12 +37,6 @@ function leerFecha(texto) {
   if (!real || anio < 1900 || fecha > new Date()) return null;
   return fecha.toISOString().slice(0, 10);
 }
-
-// ---------------------------------------------------------------------------
-// Catalogo (invitado y paciente)
-// ---------------------------------------------------------------------------
-
-// Lista con los servicios del catalogo (en paginas si son mas de 10)
 function menuServicios(pagina = 0, texto = m.bienvenida) {
   const todas = [
     ...obtenerServicios().map((s) => ({
@@ -83,8 +58,6 @@ function menuServicios(pagina = 0, texto = m.bienvenida) {
 
   return { texto: pagina === 0 ? texto : m.masServicios, boton: m.botonServicios, tipo: "lista", opciones };
 }
-
-// Arma el mensaje de un paso. "idOpcion" decide el id de cada boton siguiente.
 function mensajePaso(servicio, idPaso, idOpcion, botonesFinales) {
   const paso = buscarPaso(servicio, idPaso);
   if (!paso) return null;
@@ -104,8 +77,6 @@ function mensajePaso(servicio, idPaso, idOpcion, botonesFinales) {
 
   return { texto: rellenar(texto, servicio), opciones };
 }
-
-// Paso de un servicio como invitado (no se guarda nada)
 function pasoInvitado(servicioId, pasoId) {
   const servicio = buscarServicio(servicioId);
   const respuesta =
@@ -113,10 +84,9 @@ function pasoInvitado(servicioId, pasoId) {
     mensajePaso(servicio, pasoId || servicio.checkpointInicial, (sig) => `cp:${servicio.id}:${sig}`, (final) =>
       final ? [BOTON_ASESOR, BOTON_MENU] : [BOTON_MENU]
     );
-  return respuesta || { texto: m.noEntendi, opciones: [BOTON_MENU] };
+  return respuesta ? { ...respuesta, texto: respuesta.texto.replaceAll("{clinica}", "Clínica Demo").replaceAll("{horario}", "mañana a las 9:00") }
+    : { texto: m.noEntendi, opciones: [BOTON_MENU] };
 }
-
-// Paso de un caso real del paciente (cada boton guarda el avance en el backend)
 function pasoCaso(sesion, caso, prefijo = "") {
   const servicio = buscarServicio(caso.tipoConsultaId);
   const respuesta =
@@ -128,12 +98,11 @@ function pasoCaso(sesion, caso, prefijo = "") {
 
   const info = sesion.casos.get(caso.id);
   const para = info && !info.paraMi ? m.paraFamiliar(info.parentesco) : "";
-  return { ...respuesta, texto: prefijo + para + respuesta.texto };
+  const clinica = caso.datos?.clinica || "Por seleccionar";
+  const cita = [caso.datos?.fecha, caso.datos?.horario?.slice(0, 5)].filter(Boolean).join(" a las ");
+  const texto = respuesta.texto.replaceAll("{clinica}", clinica).replaceAll("{horario}", cita || "Por seleccionar");
+  return { ...respuesta, texto: prefijo + para + texto };
 }
-
-// ---------------------------------------------------------------------------
-// Identificacion
-// ---------------------------------------------------------------------------
 
 function bienvenida(sesion, prefijo = "") {
   Object.assign(sesion, { modo: null, estado: null });
@@ -161,10 +130,6 @@ async function revisarFecha(numero, sesion, texto) {
   return pantallaPrincipal(sesion, m.saludoVerificado(r.nombre));
 }
 
-// ---------------------------------------------------------------------------
-// Paciente identificado
-// ---------------------------------------------------------------------------
-
 const paraQuien = (prefijo = "") =>
   conPrefijo(prefijo, {
     texto: m.paraQuien,
@@ -174,8 +139,6 @@ const paraQuien = (prefijo = "") =>
       BOTON_SALIR,
     ],
   });
-
-// Tramites pendientes (de cualquier canal) o, si no hay, "¿para quien es la cita?"
 async function pantallaPrincipal(sesion, saludo = "") {
   const lista = await backend.pendientes(sesion);
   sesion.casos = new Map(lista.map((c) => [c.id, { patientId: c.patientId, paraMi: c.paraMi, parentesco: c.parentesco }]));
@@ -246,22 +209,65 @@ async function continuarCaso(sesion, caseId) {
   return pasoCaso(sesion, caso, prefijo);
 }
 
-async function avanzarCaso(sesion, caseId, paso) {
+async function avanzarCaso(sesion, caseId, paso, opcionId) {
   const info = sesion.casos.get(caseId);
   if (!info) return pantallaPrincipal(sesion);
 
   const caso = await backend.leerCaso(sesion, info.patientId, caseId);
   if (!caso) return pantallaPrincipal(sesion);
-  if (caso.pasoActual === paso) return pasoCaso(sesion, caso); // toco dos veces el mismo boton
+  if (caso.pasoActual === paso) return pasoCaso(sesion, caso);
 
-  const r = await backend.guardarPaso(sesion, info.patientId, caseId, paso, caso.version);
+  let datos;
+  if (paso === "clinica-seleccionada") {
+    const servicio = buscarServicio(caso.tipoConsultaId);
+    if (!buscarPaso(servicio, caso.pasoActual)?.siguientes.includes(paso)) return pasoCaso(sesion, caso);
+    if (!opcionId) {
+      return {
+        texto: "Elige una clínica para continuar.",
+        tipo: "lista",
+        boton: "Ver clínicas",
+        opciones: [
+          ...obtenerClinicas().map(({ id, nombre }) => ({
+            id: `cs:${caso.id}:${paso}:${id}`, titulo: nombre,
+          })),
+          BOTON_MIS_TRAMITES,
+        ],
+      };
+    }
+    const clinica = obtenerClinicas().find(item => item.id === opcionId);
+    if (!clinica) return pasoCaso(sesion, caso);
+    datos = { clinica: clinica.nombre };
+  }
+
+  if (paso === "horario-seleccionado") {
+    const servicio = buscarServicio(caso.tipoConsultaId);
+    if (!buscarPaso(servicio, caso.pasoActual)?.siguientes.includes(paso)) return pasoCaso(sesion, caso);
+    const hoy = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Mexico_City" }).format(new Date());
+    const manana = new Date(Date.parse(hoy) + 86_400_000).toISOString().slice(0, 10);
+    const horarios = obtenerHorarios();
+    if (!opcionId) {
+      return {
+        texto: `Elige un horario para el ${manana}.`,
+        tipo: "lista",
+        boton: "Ver horarios",
+        opciones: [
+          ...horarios.map(hora => ({ id: `cs:${caso.id}:${paso}:${manana}-${hora.replace(":", "")}`, titulo: hora })),
+          BOTON_MIS_TRAMITES,
+        ],
+      };
+    }
+    const opcion = /^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})$/.exec(opcionId);
+    const hora = opcion && `${opcion[2]}:${opcion[3]}`;
+    if (!opcion || opcion[1] !== manana || !horarios.includes(hora)) return pasoCaso(sesion, caso, "Vuelve a elegir un horario.\n");
+    datos = { fecha: opcion[1], horario: hora };
+  }
+
+  const r = await backend.guardarPaso(sesion, info.patientId, caseId, paso, caso.version, datos);
   if (r.caso) return pasoCaso(sesion, r.caso);
 
   const actual = (await backend.leerCaso(sesion, info.patientId, caseId)) || caso;
   return pasoCaso(sesion, actual, m.casoCambio);
 }
-
-// Lo que escribe el paciente cuando el bot le pidio un dato
 async function datoEscrito(numero, sesion, entrada) {
   if (sesion.estado === "fecha") return revisarFecha(numero, sesion, entrada);
 
@@ -285,12 +291,6 @@ async function datoEscrito(numero, sesion, entrada) {
 
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Entrada principal
-// ---------------------------------------------------------------------------
-
-// Botones y palabras clave: si llegan mientras el bot espera un dato, cuentan como comando
 const esComando = (t) =>
   /^(id|svc|cp|cs|caso|mas|para|par):/.test(t) ||
   ["menu", "salir", "asesor", "nuevo", "gracias", ...SALUDOS].includes(t);
@@ -303,8 +303,6 @@ async function decidir(numero, sesion, entrada) {
     if (respuesta) return respuesta;
   }
   sesion.estado = null;
-
-  // Siempre disponibles
   if (t === "salir" || t === "cerrar sesion") {
     const estaba = sesion.modo === "verificado";
     sesiones.cerrar(numero);
@@ -314,8 +312,6 @@ async function decidir(numero, sesion, entrada) {
     return { texto: m.asesor, opciones: [sesion.modo === "verificado" ? BOTON_MIS_TRAMITES : BOTON_MENU] };
   }
   if (t === "gracias") return { texto: m.gracias, opciones: [sesion.modo === "verificado" ? BOTON_MIS_TRAMITES : BOTON_MENU] };
-
-  // Eleccion inicial
   if (t === "id:propio") {
     Object.assign(sesion, { modo: null, estado: "fecha" });
     return { texto: m.pideFecha };
@@ -324,8 +320,6 @@ async function decidir(numero, sesion, entrada) {
     Object.assign(sesion, { modo: "invitado", estado: null });
     return { texto: m.otroNumero, opciones: [{ id: "menu", titulo: m.botonVerServicios }, BOTON_ASESOR] };
   }
-
-  // Paciente identificado
   if (sesion.modo === "verificado") {
     if (SALUDOS.includes(t) || t === "menu") return pantallaPrincipal(sesion);
     if (t === "nuevo") return paraQuien();
@@ -351,20 +345,14 @@ async function decidir(numero, sesion, entrada) {
     if (t.startsWith("svc:")) return iniciarTramite(sesion, t.slice(4));
     if (t.startsWith("caso:")) return continuarCaso(sesion, t.slice(5));
     if (t.startsWith("cs:")) {
-      const [, caseId, paso] = t.split(":");
-      return avanzarCaso(sesion, caseId, paso);
+      const [, caseId, paso, opcionId] = t.split(":");
+      return avanzarCaso(sesion, caseId, paso, opcionId);
     }
-
-    // Si escribe el nombre de un servicio (ej. "rayos x"), inicia ese tramite
     const servicio = obtenerServicios().find((s) => normalizar(s.nombre) === t || s.id === t);
     if (servicio) return iniciarTramite(sesion, servicio.id);
     return { texto: m.noEntendi, opciones: [BOTON_MIS_TRAMITES] };
   }
-
-  // Botones de un caso real sin sesion (por ejemplo, despues de cerrar sesion)
   if (/^(caso|cs|para|par):/.test(t) || t === "nuevo") return bienvenida(sesion, m.identificateDeNuevo);
-
-  // Invitado: catalogo sin datos personales
   if (t === "menu" && sesion.modo === "invitado") return menuServicios(0);
   if (t.startsWith("mas:")) return menuServicios(Number(t.slice(4)) || 0);
   if (t.startsWith("svc:")) return pasoInvitado(t.slice(4), null);
@@ -377,12 +365,8 @@ async function decidir(numero, sesion, entrada) {
     if (servicio) return pasoInvitado(servicio.id, null);
     if (!SALUDOS.includes(t) && t !== "menu") return { texto: m.noEntendi, opciones: [BOTON_MENU] };
   }
-
-  // Cualquier otra cosa: empezar
   return bienvenida(sesion);
 }
-
-// Recibe el numero de WhatsApp y lo que escribio o toco la persona
 async function responder(numero, entrada) {
   const { sesion, vencio } = sesiones.obtener(numero);
   try {
@@ -398,4 +382,4 @@ async function responder(numero, entrada) {
   }
 }
 
-module.exports = { responder, telefonoE164, leerFecha };
+module.exports = { responder };

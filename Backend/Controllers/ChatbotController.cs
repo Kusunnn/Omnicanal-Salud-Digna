@@ -20,12 +20,6 @@ using SaludDigna.Backend.Models.Patients;
 using SaludDigna.Backend.Services;
 
 namespace SaludDigna.Backend.Controllers;
-
-/// <summary>
-/// Endpoints que usa el chatbot de WhatsApp. Todas las llamadas llevan la clave del chatbot
-/// (encabezado X-Chatbot-Key = Chatbot:ApiKey). Después de identificar al paciente, el chatbot
-/// usa la cookie de sesión de paciente, igual que la web, para los demás endpoints de casos.
-/// </summary>
 [ApiController]
 [ChatbotKey]
 [Route("api/chatbot")]
@@ -44,11 +38,6 @@ public sealed partial class ChatbotController(
         ["PADRE_MADRE"] = "Padre/Madre",
         ["OTRO"] = "Otro familiar"
     };
-
-    /// <summary>
-    /// Identifica al paciente con el número de WhatsApp (que pone Meta) y su fecha de nacimiento.
-    /// Nunca dice cuál de los dos datos falló. Tres fallos bloquean el número 15 minutos.
-    /// </summary>
     [HttpPost("identidad")]
     [AllowAnonymous]
     public async Task<IActionResult> Identify(IdentityRequest request, CancellationToken token)
@@ -92,11 +81,6 @@ public sealed partial class ChatbotController(
         logger.LogInformation("Paciente {PatientId} identificado por WhatsApp", patient.Id);
         return Ok(new { patientId = patient.Id, nombre = PrimerNombre(patient.NombreCompleto) });
     }
-
-    /// <summary>
-    /// Trámites abiertos del paciente: los suyos y los que pidió para familiares.
-    /// No incluye otros trámites de esos familiares.
-    /// </summary>
     [HttpGet("pendientes")]
     [Authorize(Roles = "PACIENTE")]
     public async Task<ActionResult<IReadOnlyList<PendingCase>>> Pending(CancellationToken token)
@@ -106,8 +90,10 @@ public sealed partial class ChatbotController(
             return Unauthorized();
         }
 
+        var finalSteps = CaseCheckpoint.CompletedSteps;
         var cases = await database.Cases.AsNoTracking()
             .Where(item => (item.PatientId == me || item.SolicitantePatientId == me)
+                && item.ArchivedAt == null && !finalSteps.Contains(item.PasoActual)
                 && (item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))
             .OrderByDescending(item => item.UpdatedAt)
             .Take(20)
@@ -136,17 +122,12 @@ public sealed partial class ChatbotController(
                     checkpoint.PasoActual, checkpoint.Estado, checkpoint.UltimoCanal, checkpoint.Version,
                     checkpoint.UpdatedAt, item.PatientId == me, item.PatientId == me ? null : item.ParentescoPaciente);
             })
-            .Where(item => item.Estado != "COMPLETADO")
+            .Where(item => !CaseCheckpoint.IsCompleted(item.Estado, item.PasoActual))
             .OrderByDescending(item => item.UpdatedAt)
             .ToArray();
 
         return Ok(result);
     }
-
-    /// <summary>
-    /// Crea un trámite para un familiar. El paciente identificado queda como quien lo pidió.
-    /// Si la CURP ya existe se usa ese registro; si no, se crea uno básico con el teléfono de quien lo pide.
-    /// </summary>
     [HttpPost("familiares/casos")]
     [Authorize(Roles = "PACIENTE")]
     public async Task<ActionResult<CaseCheckpoint>> CreateForRelative(RelativeCaseRequest request, CancellationToken token)
@@ -209,7 +190,6 @@ public sealed partial class ChatbotController(
             catch (DbUpdateException exception) when (exception.InnerException is PostgresException
                    { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_patients_curp" })
             {
-                // Otro canal registró la misma CURP al mismo tiempo; usamos ese registro.
                 database.Entry(relative).State = EntityState.Detached;
                 relativeId = await database.Patients.Where(patient => patient.Curp == curp)
                     .Select(patient => (Guid?)patient.Id).SingleAsync(token);
@@ -261,7 +241,6 @@ public sealed partial class ChatbotController(
         }
         catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
         {
-            // El caso ya quedó en PostgreSQL.
         }
 
         return StatusCode(StatusCodes.Status201Created, checkpoint);
@@ -276,8 +255,6 @@ public sealed partial class ChatbotController(
 
     private static string PrimerNombre(string nombreCompleto) =>
         nombreCompleto.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
-
-    // La CURP trae la fecha de nacimiento (AAMMDD) y el siglo (posición 17: dígito = 1900, letra = 2000).
     private static DateOnly? FechaDesdeCurp(string curp)
     {
         if (curp.StartsWith("DEMO", StringComparison.Ordinal))
@@ -317,11 +294,6 @@ public sealed partial class ChatbotController(
         bool ParaMi,
         string? Parentesco);
 }
-
-/// <summary>
-/// Solo deja pasar peticiones con la clave del chatbot (Chatbot:ApiKey en User Secrets).
-/// Si la clave no está configurada, los endpoints del chatbot no existen (404).
-/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class ChatbotKeyAttribute : Attribute, IAuthorizationFilter
 {

@@ -15,9 +15,18 @@ public sealed record CaseCheckpoint(
     CaseProgressData Datos,
     int FlujoVersion = 1)
 {
+    internal static readonly string[] CompletedSteps =
+    [
+        "cita-confirmada", "cita-confirmada-con-pago", "resumen-cita", "resumen-cita-con-pago",
+        "prerregistro-confirmado", "resumen-visita", "resumen-requisitos", "resumen-estudios"
+    ];
+
+    internal static bool IsCompleted(string state, string step) =>
+        state == "COMPLETADO" || CompletedSteps.Contains(step);
+
     internal static CaseCheckpoint FromCase(PatientCase patientCase) => new(
         patientCase.Id, patientCase.PatientId, patientCase.TipoConsultaId, patientCase.PasoActual,
-        patientCase.Estado, patientCase.UltimoCanal, patientCase.Version, patientCase.UpdatedAt, ReadData(patientCase),
+        IsCompleted(patientCase.Estado, patientCase.PasoActual) ? "COMPLETADO" : patientCase.Estado, patientCase.UltimoCanal, patientCase.Version, patientCase.UpdatedAt, ReadData(patientCase),
         patientCase.FlujoVersion);
 
     private static CaseProgressData ReadData(PatientCase item)

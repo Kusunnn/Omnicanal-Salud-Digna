@@ -6,10 +6,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SaludDigna.Backend.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class InitialDatabase : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -112,8 +110,6 @@ namespace SaludDigna.Backend.Data.Migrations
                 table: "patients",
                 column: "telefono");
         }
-
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

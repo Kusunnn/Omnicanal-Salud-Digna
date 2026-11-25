@@ -2,12 +2,6 @@ using Microsoft.Extensions.Caching.Memory;
 using StackExchange.Redis;
 
 namespace SaludDigna.Backend.Services;
-
-/// <summary>
-/// Cuenta los intentos fallidos de identificación del chatbot por número de teléfono.
-/// Después de <see cref="MaxIntentos"/> fallos, el número queda bloqueado durante <see cref="Bloqueo"/>.
-/// Usa Redis cuando está configurado y disponible; si no, usa memoria del backend.
-/// </summary>
 public sealed class ChatbotIdentityAttempts(IMemoryCache memory, IConnectionMultiplexer? redis = null)
 {
     public const int MaxIntentos = 3;
@@ -30,7 +24,6 @@ public sealed class ChatbotIdentityAttempts(IMemoryCache memory, IConnectionMult
             }
             catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
             {
-                // Sin Redis seguimos contando en memoria.
             }
         }
 
@@ -55,7 +48,6 @@ public sealed class ChatbotIdentityAttempts(IMemoryCache memory, IConnectionMult
             }
             catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
             {
-                // Sin Redis seguimos contando en memoria.
             }
         }
 
@@ -88,7 +80,6 @@ public sealed class ChatbotIdentityAttempts(IMemoryCache memory, IConnectionMult
         }
         catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
         {
-            // Si Redis no responde, la llave vence sola.
         }
     }
 

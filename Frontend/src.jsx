@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChevronDown, MapPin, Search, Ticket, UserRound } from 'lucide-react';
 import { CaseBoard } from './CaseBoard';
 import { AdminStats } from './AdminStats';
+import { CaseTimelineDialog } from './CaseTimelineDialog';
 import { DeleteCaseDialog } from './DeleteCaseDialog';
 import { VerifyPatientDialog } from './VerifyPatientDialog';
 import { WebCaseFlow } from './WebCaseFlow';
@@ -12,7 +13,9 @@ import { demoApi } from './demoClient';
 import logo from './salud-digna-logo.png';
 import './style.css';
 
-const backendEnabled = import.meta.env.VITE_USE_BACKEND === 'true';
+const backendEnabled = import.meta.env.VITE_USE_BACKEND === undefined
+  ? import.meta.env.DEV
+  : import.meta.env.VITE_USE_BACKEND === 'true';
 
 const channels = [
   ['WEB', 'Portal web'], ['WHATSAPP', 'WhatsApp'],
@@ -31,6 +34,8 @@ function App() {
     return route === 'admin' ? 'ADMIN' : route === 'operador' ? 'OPERADOR' : 'PACIENTE';
   });
   const [demoEmail, setDemoEmail] = useState('');
+  const [useTicket, setUseTicket] = useState(false);
+  const [ticket, setTicket] = useState('');
   const [session, setSession] = useState(null);
   const [cases, setCases] = useState([]);
   const [registration, setRegistration] = useState(null);
@@ -47,25 +52,30 @@ function App() {
 
   const personal = view === 'PACIENTE';
   const admin = view === 'ADMIN';
-  const api = backendEnabled
-    ? (path, method, body) => backendApi(path, method, body, admin ? '/admin-api' : '/api')
-    : demoApi;
+  const operator = !personal && !admin;
+  const staff = !personal && backendEnabled;
+  const caseChannel = operator && staff ? 'CALL_CENTER' : 'WEB';
+  const useBackend = backendEnabled;
+  const api = useCallback((path, method, body) => useBackend
+    ? backendApi(path, method, body, admin ? '/admin-api' : operator ? '/operador-api' : '/api')
+    : demoApi(path, method, body), [useBackend, admin, operator]);
   const backRef = useRef(null);
   const destination = useRef(null);
+  const [caseForHistory, setCaseForHistory] = useState(null);
   const [caseToDelete, setCaseToDelete] = useState(null);
   const [caseToVerify, setCaseToVerify] = useState(null);
   const [nextService, setNextService] = useState(null);
-  const authorized = admin ? session?.rol === 'ADMIN' : !personal || session?.rol === 'PACIENTE';
+  const authorized = admin ? session?.rol === 'ADMIN' : staff ? session?.rol === 'ASESOR' : operator || session?.rol === 'PACIENTE';
   const service = item => item.datos?.estudio ?? 'Consulta';
-  const stepNames = { inicio: 'Inicio', cotizado: 'Cotización guardada', 'clinica-seleccionada': 'Clínica seleccionada', 'horario-seleccionado': 'Horario seleccionado', 'cita-confirmada': 'Cita confirmada' };
+  const stepNames = { inicio: 'Inicio', cotizado: 'Cotización guardada', 'clinica-seleccionada': 'Clínica seleccionada', 'horario-seleccionado': 'Horario seleccionado', 'cita-confirmada': 'Cita confirmada', 'pago-pendiente': 'Pago pendiente', 'pago-confirmado': 'Pago confirmado', 'cita-confirmada-con-pago': 'Cita confirmada con pago' };
   const titleFor = item => stepNames[item.pasoActual] ?? item.pasoActual;
 
   async function run(action) {
     setBusy(true);
     setError('');
     setNotice('');
-    try { await action(); }
-    catch (exception) { setError(exception.message); }
+    try { await action(); return true; }
+    catch (exception) { setError(exception.message); return false; }
     finally { setBusy(false); }
   }
 
@@ -74,15 +84,27 @@ function App() {
   }
 
   const patientId = session?.patientId;
+  const boardPatientId = staff && operator ? patientFilter?.id : patientId;
+  const staffBoard = (staff || admin) && !boardPatientId;
   useEffect(() => {
-    if ((admin ? !authorized : !patientId) || registration || busy) return;
+    if (!authorized || (!staffBoard && !boardPatientId) || registration || busy) return;
     let active = true;
     let pending = false;
     async function refresh() {
       if (pending) return;
       pending = true;
       try {
-        const result = await api(admin ? '/tablero/casos?limite=100' : casesPath(patientId) + '?incluirCompletados=true');
+        let result;
+        if (staffBoard && useBackend) {
+          result = [];
+          let page;
+          do {
+            page = await api('/tablero/casos?limite=100&omitir=' + result.length);
+            result.push(...page);
+          } while (active && page.length === 100);
+        } else {
+          result = await api(staffBoard ? '/tablero/casos?limite=100' : casesPath(boardPatientId) + '?incluirCompletados=true');
+        }
         if (active) setCases(result);
       } catch (exception) {
         if (active) setError(exception.message);
@@ -91,18 +113,25 @@ function App() {
     void refresh();
     const timer = setInterval(refresh, 3000);
     return () => { active = false; clearInterval(timer); };
-  }, [admin, authorized, patientId, registration, busy]);
+  }, [staffBoard, useBackend, authorized, boardPatientId, registration, busy]);
 
   useEffect(() => {
-    if (admin && !session) {
-      void run(async () => setSession(await api(backendEnabled ? '/demo/session' : '/demo/identidad/personal', 'POST', { rol: 'ADMIN' })));
-    } else if (!personal && !admin && !session) {
+    if (session) return;
+    if (staff) {
+      void run(async () => setSession(await api('/demo/session', 'POST')));
+    } else if (admin) {
+      void run(async () => setSession(await api('/demo/identidad/personal', 'POST', { rol: 'ADMIN' })));
+    } else if (operator) {
       void run(async () => setSession(await demoSession()));
     }
-  }, [personal, admin, session]);
+  }, [staff, operator, admin, session]);
 
   function findPatients(event) {
     event.preventDefault();
+    if (staff) {
+      void run(async () => setPatientResults(await api('/pacientes?limite=100&buscar=' + encodeURIComponent(patientQuery.trim()))));
+      return;
+    }
     const query = searchablePatient(patientQuery);
     const match = Object.values(demoPatient).some(value => searchablePatient(value).includes(query));
     setPatientResults(query && match && patientId ? [{ ...demoPatient, id: patientId }] : []);
@@ -114,7 +143,12 @@ function App() {
   function signIn(event) {
     event.preventDefault();
     setNotice('');
-    void run(async () => { setSession(await demoSession()); setScreen('servicios'); });
+    void run(async () => {
+      const identity = await api('/demo/identidad/portal', 'POST',
+        useTicket ? { ticket: ticket.trim() } : { correo: demoEmail.trim() });
+      setSession(identity);
+      setScreen('procesos');
+    });
   }
   function updateCase(item) {
     setCases(current => current.some(existing => existing.id === item.id)
@@ -188,9 +222,9 @@ function App() {
         await api(casePath(item) + '/verificar-fecha-nacimiento', 'POST', { fechaNacimiento: birthDate });
       }
       let current = await api(casePath(item));
-      if (current.ultimoCanal !== 'WEB' && current.estado !== 'COMPLETADO') {
+      if (current.ultimoCanal !== caseChannel && current.estado !== 'COMPLETADO') {
         current = await api(casePath(item) + '/retomar', 'POST', {
-          canal: 'WEB', versionEsperada: current.version, interaccionId: crypto.randomUUID(),
+          canal: caseChannel, versionEsperada: current.version, interaccionId: crypto.randomUUID(),
         });
       }
       updateCase(current);
@@ -200,38 +234,51 @@ function App() {
     });
   }
 
-  function saveCheckpoint(datos, confirm, exit = false) {
-    if (busy) return;
+  function advanceCase(pasoActual) {
+    if (busy || !registration) return;
     void run(async () => {
-      const checkpoints = ['inicio', 'cotizado', 'clinica-seleccionada', 'horario-seleccionado', 'cita-confirmada'];
+      const current = await api(casePath(registration) + '/checkpoint', 'PUT', {
+        pasoActual, canal: caseChannel, versionEsperada: registration.version,
+      });
+      updateCase(current);
+      setRegistration(current);
+    });
+  }
+
+  function saveCheckpoint(datos, finishRegistration, exit = false) {
+    if (busy) return;
+    return run(async () => {
+      const checkpoints = ['inicio', 'cotizado', 'clinica-seleccionada', 'horario-seleccionado'];
       let current = registration;
       const start = checkpoints.indexOf(current.pasoActual);
       if (start < 0) throw new Error('Este paso no se puede actualizar desde el formulario de cita.');
       const data = { ...current.datos, ...datos };
-      const target = confirm ? 4 : data.clinica && data.fecha && data.horario ? 3 : data.clinica ? 2 : 1;
+      const hasSchedule = Boolean(data.clinica && data.fecha && data.horario);
+      if (finishRegistration && !hasSchedule) throw new Error('Selecciona clínica, fecha y horario para continuar.');
+      const target = hasSchedule ? 3 : data.clinica ? 2 : start;
       const steps = checkpoints.slice(start + 1, Math.max(start, target) + 1);
       for (const pasoActual of steps.length ? steps : [current.pasoActual]) {
         current = await api(casePath(current) + '/checkpoint', 'PUT', {
-          pasoActual, datos, canal: 'WEB', versionEsperada: current.version,
+          pasoActual, datos, canal: caseChannel, versionEsperada: current.version,
         });
         updateCase(current);
         setRegistration(current);
       }
-      if (!confirm && !exit) return;
+      if (!exit) return;
       closeRegistration();
-      setNotice(confirm ? 'Cita simulada confirmada.' : 'Avance guardado. Puedes continuar después.');
+      setNotice('Avance guardado. Puedes continuar después.');
       window.scrollTo(0, 0);
     });
   }
   const query = search.trim().toLowerCase();
   const confirmedSteps = ['cita-confirmada', 'cita-confirmada-con-pago', 'resumen-cita', 'resumen-cita-con-pago',
-    'resumen-requisitos', 'resumen-visita', 'resumen-estudios'];
-  const boardCases = cases.map(item => confirmedSteps.includes(item.pasoActual) ? { ...item, estado: 'COMPLETADO' } : item);
+    'prerregistro-confirmado', 'resumen-requisitos', 'resumen-visita', 'resumen-estudios'];
+  const boardCases = cases
+    .filter(item => !personal || item.patientId === patientId)
+    .map(item => confirmedSteps.includes(item.pasoActual) ? { ...item, estado: 'COMPLETADO' } : item);
   const visibleCases = boardCases.filter(item => (!patientFilter || item.patientId === patientFilter.id) && [item.id, item.patientId, service(item), item.datos?.estudio, item.datos?.clinica].some(value => value?.toLowerCase().includes(query)));
 
-  const hasPendingCases = cases.some(item => item.patientId === patientId && item.estado !== 'COMPLETADO'
-    && !['cita-confirmada', 'cita-confirmada-con-pago', 'resumen-cita', 'resumen-cita-con-pago',
-      'resumen-requisitos', 'resumen-visita', 'resumen-estudios'].includes(item.pasoActual));
+  const hasPendingCases = boardCases.some(item => item.patientId === patientId && item.estado !== 'COMPLETADO');
   const patientSignIn = personal && !authorized;
   return <>
     {personal || registration ? <header className="portalMasthead">
@@ -279,26 +326,25 @@ function App() {
         <h1 id="patientAccessTitle">Iniciar sesión</h1>
         <p>Consulta tus trámites y retómalos desde el último paso guardado.</p>
         {error && <p role="alert" className="message error">{error}</p>}
-                <form onSubmit={signIn}>
-          <button className="ticketOption" type="submit" disabled={busy}>
-            <Ticket size={17}/> Continuar con ticket
-          </button>
-        </form>
+        <button className="ticketOption" type="button" disabled={busy}
+          onClick={() => { setUseTicket(value => !value); setError(''); }}>
+          <Ticket size={17}/> {useTicket ? 'Continuar con correo' : 'Continuar con ticket'}
+        </button>
         <div className="demoLoginSeparator">o</div>
-        <form onSubmit={event => {
-          if (demoEmail.trim()) signIn(event);
-          else event.preventDefault();
-        }}>
-          <input type="text" inputMode="email" aria-label="Correo electrónico" placeholder="Correo electrónico"
-            value={demoEmail} onChange={event => setDemoEmail(event.target.value)}/>
-          <button className="patientSubmit" type="submit" disabled={busy || !demoEmail.trim()}>
+        <form onSubmit={signIn}>
+          {useTicket
+            ? <input required maxLength={64} aria-label="Ticket" placeholder="Número de ticket"
+                value={ticket} onChange={event => setTicket(event.target.value)}/>
+            : <input required type="email" maxLength={254} aria-label="Correo electrónico" placeholder="Correo electrónico"
+                value={demoEmail} onChange={event => setDemoEmail(event.target.value)}/>}
+          <button className="patientSubmit" type="submit" disabled={busy || !(useTicket ? ticket : demoEmail).trim()}>
             Continuar
           </button>
         </form>
       </section>
       </div>
     </main> : registration ? <WebCaseFlow key={registration.id} item={registration} operator={!personal}
-      busy={busy} error={error} onSave={saveCheckpoint} backRef={backRef}
+      busy={busy} error={error} onSave={saveCheckpoint} onAdvance={advanceCase} backRef={backRef}
       onBack={data => {if (data) saveCheckpoint(data, false, true); else {closeRegistration(); setError('');}}}/> :
       personal && screen === 'servicios' ? <ServicesHome onChoose={chooseService} busy={busy} error={error}/> :<main className={personal ? "portalWorkspace" : "portalWorkspace staffWorkspace"}>
       <section className="intro">
@@ -310,21 +356,24 @@ function App() {
       {notice && <p role="status" className="message success">{notice}</p>}
       {!personal && !admin && authorized && <section className="panel patientFinder" aria-label="Buscador de pacientes">
         <form onSubmit={findPatients}><label>Buscar paciente<input required maxLength={200} value={patientQuery} onChange={e => {setPatientQuery(e.target.value); setPatientResults(null);}} placeholder="Nombre, CURP, teléfono con lada o identificador"/></label>
-          <button className="primary" disabled={busy || !patientId || !patientQuery.trim()}>Buscar</button></form>
+          <button className="primary" disabled={busy || (!staff && !patientId) || !patientQuery.trim()}>Buscar</button></form>
         {patientResults?.length === 0 && <p>No se encontraron pacientes.</p>}
         {patientResults?.length > 0 && <ul>{patientResults.map(patient => <li key={patient.id}><button className="quiet" onClick={() => filterPatient(patient)}>{patient.nombreCompleto} · {patient.id.slice(0, 8)}</button></li>)}</ul>}
         {patientFilter && <div className="actions"><strong>{patientFilter.nombreCompleto}</strong><button className="quiet" onClick={() => filterPatient(null)}>Ver todos los casos</button></div>}
       </section>}
-      {admin && !authorized ? <p role="status">{busy ? "Conectando con el tablero…" : "La sesión de administración local no está disponible."}</p> : <>
+      {(staff || admin) && !authorized ? <p role="status">{busy ? "Conectando con el tablero…" : "La sesión del tablero local no está disponible."}</p> : <>
       {admin && <AdminStats cases={boardCases} titleFor={titleFor} channelName={channelName}/>}
       <CaseBoard cases={authorized ? boardCases : []} visibleCases={authorized ? visibleCases : []}
         search={search} onSearch={setSearch} channel={boardChannel} onChannel={setBoardChannel}
         channels={channels} channelName={channelName} service={service} titleFor={titleFor}
         personal={personal} admin={admin} authorized={authorized} role={admin ? "ADMIN" : "ASESOR"} busy={busy}
-                onContinue={item => {
-                  if (personal || admin) continueInWeb(item);
+        onHistory={staff && authorized ? setCaseForHistory : undefined}
+                onContinue={admin ? undefined : item => {
+                  if (personal) continueInWeb(item);
                   else {setError(''); setCaseToVerify(item);}
                 }} onDelete={personal || admin ? item => {setError(''); setCaseToDelete(item);} : undefined}/></>}
+      {caseForHistory && <CaseTimelineDialog key={caseForHistory.id} item={caseForHistory}
+        api={api} channelName={channelName} titleFor={titleFor} onClose={() => setCaseForHistory(null)}/>}
       {caseToVerify && <VerifyPatientDialog item={caseToVerify} error={error} busy={busy}
         onCancel={() => {setCaseToVerify(null); setError('');}}
         onVerify={date => continueInWeb(caseToVerify, date)}/>}

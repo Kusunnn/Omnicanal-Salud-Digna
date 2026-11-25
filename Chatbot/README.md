@@ -23,7 +23,7 @@ Al escribir, el bot pregunta **de quién son los trámites**:
 - **Míos, este número**: el bot usa el número de WhatsApp de quien escribe. Ese número lo pone Meta en cada mensaje (`from`) y no se puede falsificar, porque WhatsApp ya lo verificó con un código SMS. Luego pide la **fecha de nacimiento** (`15/03/1990`). El backend busca un paciente con ese teléfono y esa fecha.
   - Si no coinciden, el bot nunca dice cuál de los dos datos falló, así nadie puede averiguar qué números son pacientes.
   - Después de **3 intentos fallidos** el número queda **bloqueado 15 minutos**. El backend lleva la cuenta (en Redis, o en memoria si Redis no está), así que el bloqueo sigue aunque se reinicie el bot.
-- **Usar otro número** (por ejemplo, un celular prestado): por seguridad no se muestra ningún dato personal, como en los bancos. Solo puede ver el catálogo como invitado o hablar con un asesor.
+- **Invitado** permite consultar el catálogo o hablar con un asesor.
 
 ### Paciente identificado
 
@@ -67,7 +67,7 @@ Si cambias el catálogo del backend o el `.env`, reinicia el bot con **Ctrl+C** 
 
 ### Probar la identificación con tu celular
 
-Los 200 pacientes de prueba tienen teléfonos falsos (`+520000000001`, ...). Para que el bot te reconozca, pon tu número a uno de ellos en pgAdmin (10 dígitos después de `+52`):
+Los tres pacientes de prueba tienen teléfonos ficticios (`+520000000001`, ...). Para que el bot te reconozca, pon tu número a uno de ellos en pgAdmin (10 dígitos después de `+52`):
 
 ```sql
 UPDATE patients SET telefono = '+52TU_NUMERO_A_10_DIGITOS'

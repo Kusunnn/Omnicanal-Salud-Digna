@@ -35,6 +35,42 @@ public sealed class DemoIdentityController(
         return Ok(new { patientId, rol = "PACIENTE" });
     }
 
+    [HttpPost("portal")]
+    public async Task<IActionResult> Portal(PortalIdentityRequest request, CancellationToken token)
+    {
+        if (!environment.IsDevelopment()) return NotFound();
+
+        var email = request.Correo?.Trim().ToLowerInvariant();
+        var ticket = request.Ticket?.Trim().ToUpperInvariant();
+        if (string.IsNullOrEmpty(email) == string.IsNullOrEmpty(ticket)) return Unauthorized();
+
+        var patients = database.Patients.AsNoTracking().Where(patient => patient.Curp.StartsWith("DEMO"));
+        if (!string.IsNullOrEmpty(ticket))
+        {
+            if (ticket.Length != 9 || !ticket.StartsWith("DEMO-", StringComparison.Ordinal)
+                || !int.TryParse(ticket.AsSpan(5), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var number)
+                || number is < 1 or > 200)
+            {
+                return Unauthorized();
+            }
+
+            var curp = FormattableString.Invariant($"DEMO{number:D14}");
+            patients = patients.Where(patient => patient.Curp == curp);
+        }
+        else
+        {
+            patients = patients.Where(patient => patient.Correo != null && patient.Correo.ToLower() == email);
+        }
+
+        var ids = await patients.Select(patient => patient.Id).Take(2).ToListAsync(token);
+        if (ids.Count != 1) return Unauthorized();
+
+        var patientId = ids[0];
+        await SignInAsync(patientId.ToString(), "PACIENTE");
+        return Ok(new { patientId, rol = "PACIENTE" });
+    }
+
     [HttpPost("personal")]
     public async Task<IActionResult> Staff(StaffIdentityRequest request)
     {
@@ -69,6 +105,10 @@ public sealed class DemoIdentityController(
     public sealed record PatientIdentityRequest(
         [Required, StringLength(18)] string Curp,
         [Required, RegularExpression(@"\+[1-9][0-9]{1,14}")] string Telefono);
+
+    public sealed record PortalIdentityRequest(
+        [StringLength(254)] string? Correo,
+        [StringLength(64)] string? Ticket);
 
     public sealed record StaffIdentityRequest(
         [Required, StringLength(10)] string Rol,

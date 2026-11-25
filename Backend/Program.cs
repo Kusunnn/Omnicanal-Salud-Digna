@@ -9,7 +9,7 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.Cookie.Name = "salud-digna-session";
@@ -87,8 +87,6 @@ if (!string.IsNullOrWhiteSpace(redisConnection))
     });
 }
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+app.MapControllers();
 
 app.Run();

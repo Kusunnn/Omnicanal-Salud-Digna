@@ -34,9 +34,11 @@ public sealed class CasesController(
             return Forbid();
         }
 
+        var finalSteps = CaseCheckpoint.CompletedSteps;
         var cases = await database.Cases.AsNoTracking()
             .Where(item => item.PatientId == patientId && item.ArchivedAt == null &&
-                (incluirCompletados || item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))
+                (incluirCompletados || (!finalSteps.Contains(item.PasoActual)
+                    && (item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))))
             .ToListAsync(cancellationToken);
 
         var contexts = await ReadContextsAsync(patientId, cases.Select(item => item.Id).ToArray(), cancellationToken);
@@ -47,6 +49,7 @@ public sealed class CasesController(
                 pending.TryGetValue(item.Id, out var current) && current.Version > item.Version
                     ? current
                     : CaseCheckpoint.FromCase(item))
+            .Where(item => incluirCompletados || !CaseCheckpoint.IsCompleted(item.Estado, item.PasoActual))
             .OrderByDescending(item => item.UpdatedAt)
             .ThenByDescending(item => item.Id)
             .ToArray());
@@ -62,8 +65,7 @@ public sealed class CasesController(
         }
 
         var cases = database.Cases.Where(item => item.Id == caseId && item.PatientId == patientId);
-        string[] finalSteps = ["cita-confirmada", "cita-confirmada-con-pago", "resumen-cita",
-            "resumen-cita-con-pago", "prerregistro-confirmado", "resumen-visita", "resumen-requisitos", "resumen-estudios"];
+        var finalSteps = CaseCheckpoint.CompletedSteps;
         var now = DateTime.UtcNow;
         var changed = await cases
             .Where(item => item.ArchivedAt == null && item.Estado != "COMPLETADO" && !finalSteps.Contains(item.PasoActual))
@@ -91,7 +93,7 @@ public sealed class CasesController(
         var context = contexts.FirstOrDefault();
         if (context is { Immediate: false })
         {
-            return Ok(context.Checkpoint);
+            return Ok(await CarryWhatsAppContextAsync(context.Checkpoint, cancellationToken));
         }
 
         var checkpoint = await ReadDatabaseAsync(patientId, caseId, cancellationToken);
@@ -101,7 +103,7 @@ public sealed class CasesController(
         }
 
         await WarmAsync(checkpoint, cancellationToken);
-        return Ok(checkpoint);
+        return Ok(await CarryWhatsAppContextAsync(checkpoint, cancellationToken));
     }
 
     [HttpPost]
@@ -131,6 +133,12 @@ public sealed class CasesController(
             return NotFound();
         }
 
+        var data = request.Datos ?? new CaseProgressData();
+        if (request.Canal == "WHATSAPP" && requesterId == patientId && data.Prerregistro is null)
+        {
+            data = data with { Prerregistro = await ReadRegistrationDraftAsync(patientId, cancellationToken) };
+        }
+
         var patientCase = new PatientCase
         {
             Id = Guid.NewGuid(),
@@ -144,6 +152,7 @@ public sealed class CasesController(
             ParentescoPaciente = request.Datos?.Parentesco,
             FechaCita = request.Datos?.Fecha,
             HorarioCita = request.Datos?.Horario,
+            DatosParciales = JsonSerializer.SerializeToElement(data, JsonSerializerOptions.Web),
             PasoActual = consultation.CheckpointInicial,
             UltimoCanal = request.Canal
         };
@@ -202,11 +211,6 @@ public sealed class CasesController(
             return ConflictVersion();
         }
 
-        if (checkpoint.Estado == "COMPLETADO")
-        {
-            return Problem(statusCode: 409, title: "El caso ya está completado.");
-        }
-
         var consultation = FindConsultation(checkpoint.TipoConsultaId, checkpoint.FlujoVersion);
         var currentNode = consultation?.Checkpoints.FirstOrDefault(item => item.Id == checkpoint.PasoActual);
         if (currentNode is null)
@@ -215,6 +219,13 @@ public sealed class CasesController(
         }
 
         var staysAtCurrentStep = currentNode.Id == request.PasoActual;
+        var completesCase = CaseCheckpoint.CompletedSteps.Contains(request.PasoActual);
+        if (CaseCheckpoint.IsCompleted(checkpoint.Estado, checkpoint.PasoActual)
+            && (staysAtCurrentStep || !completesCase || !currentNode.Siguientes.Contains(request.PasoActual)))
+        {
+            return Problem(statusCode: 409, title: "El caso ya está completado.");
+        }
+
         if (!staysAtCurrentStep && !currentNode.Siguientes.Contains(request.PasoActual))
         {
             return Problem(statusCode: 400, title: "Elige el checkpoint actual o una de sus opciones.");
@@ -232,15 +243,26 @@ public sealed class CasesController(
         {
             PasoActual = request.PasoActual,
             UltimoCanal = request.Canal,
-            Estado = "EN_PROGRESO",
+            Estado = completesCase ? "COMPLETADO" : "EN_PROGRESO",
             Version = checkpoint.Version + 1,
             UpdatedAt = DateTime.UtcNow,
             Datos = data
         };
+        var previousData = checkpoint.Datos;
+        var updatedFields = new (bool Changed, string Label)[]
+        {
+            (previousData.Parentesco != data.Parentesco, "destinatario"),
+            (previousData.Estudio != data.Estudio, "estudio"),
+            (previousData.Clinica != data.Clinica, "clínica"),
+            (previousData.Fecha != data.Fecha, "fecha"),
+            (previousData.Horario != data.Horario, "horario"),
+            (previousData.Prerregistro != data.Prerregistro, "datos de prerregistro")
+        };
         var change = new CheckpointChange(updated.Version, checkpoint.PasoActual, updated.PasoActual,
             updated.UltimoCanal, updated.UpdatedAt, CanalAnterior: checkpoint.UltimoCanal,
-            ActorId: ActorId, EventId: Guid.NewGuid());
-        var next = new CheckpointContext(updated, [.. current.Changes, change], 0, target.GuardadoInmediato);
+            ActorId: ActorId, EventId: Guid.NewGuid(),
+            CamposActualizados: updatedFields.Where(field => field.Changed).Select(field => field.Label).ToArray());
+        var next = new CheckpointContext(updated, [.. current.Changes, change], 0, completesCase || target.GuardadoInmediato);
 
         return await SaveAsync(current, next, cancellationToken);
     }
@@ -311,7 +333,7 @@ public sealed class CasesController(
                 : checkpoint);
         }
 
-        if (current.Immediate || checkpoint.Version != request.VersionEsperada || checkpoint.Estado == "COMPLETADO")
+        if (current.Immediate || checkpoint.Version != request.VersionEsperada || CaseCheckpoint.IsCompleted(checkpoint.Estado, checkpoint.PasoActual))
         {
             return ConflictVersion();
         }
@@ -326,7 +348,8 @@ public sealed class CasesController(
             UltimoCanal = request.Canal,
             Estado = "EN_PROGRESO",
             Version = checkpoint.Version + 1,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            Datos = (await CarryWhatsAppContextAsync(checkpoint, cancellationToken)).Datos
         };
         var change = new CheckpointChange(updated.Version, checkpoint.PasoActual, checkpoint.PasoActual,
             request.Canal, updated.UpdatedAt, "CASO_RETOMADO", checkpoint.UltimoCanal,
@@ -339,7 +362,8 @@ public sealed class CasesController(
     [HttpGet("{caseId:guid}/eventos")]
     public async Task<ActionResult<IReadOnlyList<CaseTimelineEvent>>> Timeline(
         Guid patientId, Guid caseId, CancellationToken cancellationToken,
-        [FromQuery, Range(1, 100)] int limite = 30)
+        [FromQuery, Range(1, 100)] int limite = 30,
+        [FromQuery, Range(0, int.MaxValue - 100)] int omitir = 0)
     {
         if (!await CanAccessCaseAsync(patientId, caseId, cancellationToken)
             || !await database.Cases.AnyAsync(item => item.PatientId == patientId && item.Id == caseId, cancellationToken))
@@ -349,7 +373,8 @@ public sealed class CasesController(
 
         var contexts = await ReadContextsAsync(patientId, new[] { caseId }, cancellationToken);
         var history = await database.Events.AsNoTracking().Where(item => item.CaseId == caseId)
-            .OrderByDescending(item => item.OcurridoAt).ThenByDescending(item => item.Id).Take(limite)
+            .OrderByDescending(item => item.OcurridoAt).ThenByDescending(item => item.CaseVersion)
+            .ThenByDescending(item => item.Id).Take(omitir + limite)
             .Select(item => new CaseTimelineEvent(item.Id, item.CaseId, item.CaseVersion, item.Canal,
                 item.TipoEvento, item.ResumenLegible, item.OcurridoAt, item.CreatedAt, item.ModoPersistencia, item.PayloadJson))
             .ToListAsync(cancellationToken);
@@ -362,8 +387,8 @@ public sealed class CasesController(
                 change.Canal, change.TipoEvento, change.Resumen, change.UpdatedAt, null, null,
                 CheckpointPersistence.SerializeChange(change))));
 
-        return Ok(history.OrderBy(item => item.OcurridoAt).ThenBy(item => item.Version).ThenBy(item => item.Id)
-            .TakeLast(limite).ToArray());
+        return Ok(history.OrderByDescending(item => item.OcurridoAt).ThenByDescending(item => item.Version)
+            .ThenByDescending(item => item.Id).Skip(omitir).Take(limite).Reverse().ToArray());
     }
 
     private async Task<ActionResult<CaseCheckpoint>> SaveAsync(
@@ -411,7 +436,6 @@ public sealed class CasesController(
             }
             catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
             {
-                // The commit succeeded. The worker can acknowledge it on a later pass.
             }
         }
 
@@ -446,8 +470,59 @@ public sealed class CasesController(
         }
         catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
         {
-            // A PostgreSQL read or creation may succeed while Redis is unavailable.
         }
+    }
+
+    private async Task<CaseCheckpoint> CarryWhatsAppContextAsync(CaseCheckpoint checkpoint, CancellationToken token)
+    {
+        var data = checkpoint.Datos;
+        var missingClinic = string.IsNullOrWhiteSpace(data.Clinica) && checkpoint.PasoActual == "clinica-seleccionada";
+        var missingDraft = data.Prerregistro is null && IsOwnerOrStaff(checkpoint.PatientId);
+        var missingRecipient = string.IsNullOrWhiteSpace(data.Parentesco);
+        if (!missingClinic && !missingDraft && !missingRecipient) return checkpoint;
+
+        if (checkpoint.UltimoCanal != "WHATSAPP" && !await database.Events.AnyAsync(item =>
+            item.CaseId == checkpoint.Id && item.TipoEvento == "CASO_CREADO" && item.Canal == "WHATSAPP", token))
+        {
+            return checkpoint;
+        }
+        if (missingClinic)
+        {
+            data = data with { Clinica = ConsultationTypesController.LegacyClinic };
+        }
+
+        if (missingRecipient)
+        {
+            var ownCase = await database.Cases.AnyAsync(item => item.Id == checkpoint.Id &&
+                (item.SolicitantePatientId == null || item.SolicitantePatientId == item.PatientId), token);
+            data = data with { Parentesco = ownCase ? "Para mí" : "Para otra persona" };
+        }
+
+        if (missingDraft)
+        {
+            data = data with { Prerregistro = await ReadRegistrationDraftAsync(checkpoint.PatientId, token) };
+        }
+
+        return checkpoint with { Datos = data };
+    }
+
+    private async Task<RegistrationDraft?> ReadRegistrationDraftAsync(Guid patientId, CancellationToken token)
+    {
+        var patient = await database.Patients.AsNoTracking().Where(item => item.Id == patientId)
+            .Select(item => new { item.NombreCompleto, item.FechaNacimiento, item.Sexo, item.Correo, item.Telefono })
+            .SingleOrDefaultAsync(token);
+        if (patient is null) return null;
+        var parts = patient.NombreCompleto.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var surnames = Math.Min(2, Math.Max(0, parts.Length - 1));
+        var givenCount = parts.Length - surnames;
+        return new RegistrationDraft(
+            Nombres: string.Join(' ', parts.Take(givenCount)),
+            ApellidoPaterno: surnames > 0 ? parts[givenCount] : null,
+            ApellidoMaterno: surnames > 1 ? parts[givenCount + 1] : null,
+            Nacimiento: patient.FechaNacimiento,
+            Sexo: patient.Sexo switch { "M" => "Mujer", "H" => "Hombre", _ => null },
+            Correo: patient.Correo,
+            Whatsapp: patient.Telefono);
     }
 
     private string? ActorId => User.FindFirstValue(ClaimTypes.NameIdentifier);

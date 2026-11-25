@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, LockKeyhole, Monitor, MapPin, Search, Stethoscope, Trash2 } from 'lucide-react';
+import { LayoutDashboard, LockKeyhole, Monitor, MapPin, Ellipsis, Search, Stethoscope, Trash2 } from 'lucide-react';
 
 const columns = [
   { id: 'EN_PROGRESO', title: 'En proceso', color: 'progress' },
@@ -9,7 +9,7 @@ const columns = [
 
 export function CaseBoard({ cases, visibleCases, search, onSearch, channel, onChannel,
   channels, channelName, service, titleFor, authorized, role, busy, personal, admin = false,
-  onContinue, onDelete }) {
+  onContinue, onDelete, onHistory }) {
   return <section className="board" aria-label="Canvas de casos">
     <div className="boardToolbar">
       <div className="boardTitle"><LayoutDashboard size={20}/><div><h2>{personal ? "Mis casos" : "Casos de atención"}</h2>
@@ -30,12 +30,16 @@ export function CaseBoard({ cases, visibleCases, search, onSearch, channel, onCh
           <div className="laneHeading"><h3><i aria-hidden="true"/>{column.title}</h3><span>{authorized ? items.length : '—'}</span></div>
           {items.length === 0 && <p className="laneEmpty">{authorized ? 'Sin casos en esta columna' : 'Inicia sesión para ver los casos'}</p>}
           {items.map(item => <article className="boardCard" key={item.id}>
-            <div className="cardMeta"><span>{channelName(item.ultimoCanal)}</span><small>#{item.id.slice(0, 8).toUpperCase()}</small></div>
+            <div className="cardMeta"><span>{channelName(item.ultimoCanal)}</span><small>#{item.id.slice(0, 8).toUpperCase()}</small>
+              {onHistory && <button type="button" className="quiet cardHistory" aria-haspopup="dialog"
+                aria-label={`Ver historial del folio ${item.id.slice(0, 8).toUpperCase()}`}
+                title="Ver historial" onClick={() => onHistory(item)}><Ellipsis size={18} aria-hidden="true"/></button>}
+            </div>
             <div className="cardOpen"><Stethoscope size={16}/><strong>{item.datos?.estudio || service(item)}</strong></div>
             <p className="cardStep">{titleFor(item)}</p>
             {item.datos?.clinica && <p className="cardClinic"><MapPin size={14}/>{item.datos.clinica}</p>}
             {item.datos?.fecha && <p className="cardClinic">{item.datos.fecha}{item.datos.horario ? ' · ' + item.datos.horario.slice(0, 5) : ''}</p>}
-            {(personal || role === 'ASESOR' || role === 'ADMIN') && item.estado !== 'COMPLETADO' && <button className="quiet cardContinue" onClick={() => onContinue(item)} disabled={busy}><Monitor size={15}/> Continuar en Web</button>}
+            {onContinue && (personal || role === 'ASESOR') && item.estado !== 'COMPLETADO' && <button className="quiet cardContinue" onClick={() => onContinue(item)} disabled={busy}><Monitor size={15}/> {personal ? 'Continuar en Web' : 'Retomar en Call Center'}</button>}
             {onDelete && item.estado !== 'COMPLETADO' && <button type="button" className="quiet cardDelete" onClick={() => onDelete(item)} disabled={busy}><Trash2 size={14}/> Eliminar</button>}
           </article>)}
         </section>;

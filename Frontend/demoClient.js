@@ -28,6 +28,11 @@ function saveCase(cases, item) {
 }
 
 export async function demoApi(path, method = 'GET', body = {}) {
+  if (path === '/demo/identidad/portal' && method === 'POST') {
+    const valid = body.correo?.toLowerCase() === 'teresa@example.test' || body.ticket?.toUpperCase() === 'DEMO-0001';
+    if (!valid) throw new Error('Verifica el correo o el ticket de prueba.');
+    return { patientId, rol: 'PACIENTE' };
+  }
   if (path === '/demo/identidad/paciente' && method === 'POST') return { patientId, rol: 'PACIENTE' };
   if (path === '/demo/identidad/personal' && method === 'POST' && body.rol === 'ADMIN') return { rol: 'ADMIN' };
   const route = path.split('?')[0];
@@ -68,10 +73,18 @@ export async function demoApi(path, method = 'GET', body = {}) {
   if (action === 'checkpoint' && method === 'PUT') {
     const current = steps.indexOf(item.pasoActual);
     const next = steps.indexOf(body.pasoActual);
-    if (current < 0 || next < current || next > current + 1) throw new Error('El paso solicitado no está disponible.');
+    const paymentNext = {
+      'horario-seleccionado': 'pago-pendiente',
+      'pago-pendiente': 'pago-confirmado',
+      'pago-confirmado': 'cita-confirmada-con-pago',
+    };
+    const appointmentStep = current >= 0 && next >= current && next <= current + 1;
+    if (!appointmentStep && paymentNext[item.pasoActual] !== body.pasoActual) {
+      throw new Error('El paso solicitado no está disponible.');
+    }
     return saveCase(cases, {
       ...item, pasoActual: body.pasoActual, ultimoCanal: body.canal, version: item.version + 1,
-      estado: body.pasoActual === 'cita-confirmada' ? 'COMPLETADO' : 'EN_PROGRESO',
+      estado: ['cita-confirmada', 'cita-confirmada-con-pago'].includes(body.pasoActual) ? 'COMPLETADO' : 'EN_PROGRESO',
       datos: { ...item.datos, ...body.datos },
     });
   }

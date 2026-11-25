@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SaludDigna.Backend.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class ArchivePatientCases : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<DateTime>(
@@ -17,8 +15,6 @@ namespace SaludDigna.Backend.Data.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
         }
-
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

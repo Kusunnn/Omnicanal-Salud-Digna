@@ -42,7 +42,6 @@ internal sealed class CheckpointSyncWorker(
             }
             catch (DbUpdateConcurrencyException)
             {
-                // Another replica persisted a newer version. The Redis lease makes the items eligible again.
             }
             catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception)
                 || exception is DbUpdateException or NpgsqlException or InvalidOperationException)

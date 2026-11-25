@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SaludDigna.Backend.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class OmnichannelIdentityAndTimeline : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -299,8 +297,6 @@ namespace SaludDigna.Backend.Data.Migrations
                 principalColumn: "id",
                 onDelete: ReferentialAction.Restrict);
         }
-
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

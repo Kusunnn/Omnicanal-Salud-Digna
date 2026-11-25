@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SaludDigna.Backend.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class PatientDemographicsAndRequiredCurp : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterColumn<string>(
@@ -42,8 +40,6 @@ namespace SaludDigna.Backend.Data.Migrations
                 maxLength: 20,
                 nullable: true);
         }
-
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
