@@ -45,10 +45,12 @@ public sealed class CasesController(
         var pending = contexts.Where(context => !context.Immediate)
             .ToDictionary(context => context.Checkpoint.Id, context => context.Checkpoint);
 
+        var now = DateTime.UtcNow;
         return Ok(cases.Select(item =>
                 pending.TryGetValue(item.Id, out var current) && current.Version > item.Version
                     ? current
                     : CaseCheckpoint.FromCase(item))
+            .Select(item => item.WithActivityState(now))
             .Where(item => incluirCompletados || !CaseCheckpoint.IsCompleted(item.Estado, item.PasoActual))
             .OrderByDescending(item => item.UpdatedAt)
             .ThenByDescending(item => item.Id)
@@ -93,7 +95,7 @@ public sealed class CasesController(
         var context = contexts.FirstOrDefault();
         if (context is { Immediate: false })
         {
-            return Ok(await CarryWhatsAppContextAsync(context.Checkpoint, cancellationToken));
+            return Ok(await CarryWhatsAppContextAsync(context.Checkpoint.WithActivityState(DateTime.UtcNow), cancellationToken));
         }
 
         var checkpoint = await ReadDatabaseAsync(patientId, caseId, cancellationToken);
@@ -103,7 +105,7 @@ public sealed class CasesController(
         }
 
         await WarmAsync(checkpoint, cancellationToken);
-        return Ok(await CarryWhatsAppContextAsync(checkpoint, cancellationToken));
+        return Ok(await CarryWhatsAppContextAsync(checkpoint.WithActivityState(DateTime.UtcNow), cancellationToken));
     }
 
     [HttpPost]
@@ -125,18 +127,29 @@ public sealed class CasesController(
         }
 
         var requesterId = request.SolicitantePatientId ?? patientId;
-        var ownerExists = await database.Patients.AnyAsync(patient => patient.Id == patientId, cancellationToken);
+        var owner = await database.Patients.AsNoTracking().Where(patient => patient.Id == patientId)
+            .Select(patient => new { patient.FechaNacimiento }).SingleOrDefaultAsync(cancellationToken);
         var requesterPhone = await database.Patients.Where(patient => patient.Id == requesterId)
             .Select(patient => patient.Telefono).SingleOrDefaultAsync(cancellationToken);
-        if (!ownerExists || requesterPhone is null)
+        if (owner is null || requesterPhone is null)
         {
             return NotFound();
         }
 
-        var data = request.Datos ?? new CaseProgressData();
-        if (request.Canal == "WHATSAPP" && requesterId == patientId && data.Prerregistro is null)
+        if (request.Canal == "CALL_CENTER" && (!User.IsInRole("ASESOR")
+            || request.FechaNacimiento is null || request.FechaNacimiento != owner.FechaNacimiento))
         {
-            data = data with { Prerregistro = await ReadRegistrationDraftAsync(patientId, cancellationToken) };
+            return Problem(statusCode: 403, title: "No se pudo verificar al paciente para iniciar el trámite.");
+        }
+
+        var data = request.Datos ?? new CaseProgressData();
+        if (request.Canal is "WHATSAPP" or "CALL_CENTER" && requesterId == patientId)
+        {
+            data = data with
+            {
+                Parentesco = data.Parentesco ?? "Para mí",
+                Prerregistro = data.Prerregistro ?? await ReadRegistrationDraftAsync(patientId, cancellationToken)
+            };
         }
 
         var patientCase = new PatientCase
@@ -149,7 +162,7 @@ public sealed class CasesController(
             SolicitanteTelefono = request.SolicitanteTelefono ?? requesterPhone,
             Estudio = request.Datos?.Estudio ?? consultation.Nombre,
             Clinica = request.Datos?.Clinica,
-            ParentescoPaciente = request.Datos?.Parentesco,
+            ParentescoPaciente = data.Parentesco,
             FechaCita = request.Datos?.Fecha,
             HorarioCita = request.Datos?.Horario,
             DatosParciales = JsonSerializer.SerializeToElement(data, JsonSerializerOptions.Web),
@@ -200,7 +213,7 @@ public sealed class CasesController(
             return NotFound();
         }
 
-        var checkpoint = current.Checkpoint;
+        var checkpoint = current.Checkpoint.WithActivityState(DateTime.UtcNow);
         if (current.Immediate)
         {
             return Problem(statusCode: 409, title: "El caso tiene un checkpoint final pendiente de confirmación.");
@@ -316,7 +329,7 @@ public sealed class CasesController(
             return NotFound();
         }
 
-        var checkpoint = current.Checkpoint;
+        var checkpoint = current.Checkpoint.WithActivityState(DateTime.UtcNow);
         var recorded = await database.Events.AsNoTracking()
             .Where(item => item.CaseId == caseId && item.InteraccionId == request.InteraccionId)
             .Select(item => new { item.Canal, item.ActorId })
@@ -338,7 +351,7 @@ public sealed class CasesController(
             return ConflictVersion();
         }
 
-        if (checkpoint.UltimoCanal == request.Canal)
+        if (checkpoint.UltimoCanal == request.Canal && checkpoint.Estado != "INTERRUMPIDO")
         {
             return Ok(checkpoint);
         }

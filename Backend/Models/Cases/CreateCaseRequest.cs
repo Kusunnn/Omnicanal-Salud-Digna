@@ -14,6 +14,8 @@ public sealed class CreateCaseRequest
 
     public CaseProgressData? Datos { get; init; }
 
+    public DateOnly? FechaNacimiento { get; init; }
+
     [Required, RegularExpression("WEB|WHATSAPP|CALL_CENTER|APP|CLINICA")]
     public string Canal { get; init; } = string.Empty;
 }

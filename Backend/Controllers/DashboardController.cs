@@ -21,6 +21,7 @@ public sealed class DashboardController(SaludDignaDbContext database, CaseCheckp
         var cases = await database.Cases.AsNoTracking().Where(item => item.ArchivedAt == null)
             .OrderByDescending(item => item.UpdatedAt).ThenByDescending(item => item.Id)
             .Skip(omitir).Take(limite).ToListAsync(token);
+        var now = DateTime.UtcNow;
         var confirmed = cases.Select(CaseCheckpoint.FromCase).ToArray();
         IReadOnlyList<CheckpointContext> contexts;
         try
@@ -29,13 +30,14 @@ public sealed class DashboardController(SaludDignaDbContext database, CaseCheckp
         }
         catch (Exception exception) when (CaseCheckpointCache.IsUnavailable(exception))
         {
-            return Ok(confirmed);
+            return Ok(confirmed.Select(item => item.WithActivityState(now)).ToArray());
         }
 
         var active = contexts.Where(item => !item.Immediate)
             .ToDictionary(item => item.Checkpoint.Id, item => item.Checkpoint);
         return Ok(confirmed.Select(item =>
                 active.TryGetValue(item.Id, out var pending) && pending.Version > item.Version ? pending : item)
+            .Select(item => item.WithActivityState(now))
             .OrderByDescending(item => item.UpdatedAt).ThenByDescending(item => item.Id).ToArray());
     }
 }

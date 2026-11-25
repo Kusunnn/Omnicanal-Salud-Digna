@@ -44,10 +44,18 @@ export async function demoApi(path, method = 'GET', body = {}) {
   const cases = readCases();
   if (!caseId && method === 'GET') return cases;
   if (!caseId && method === 'POST') {
+    if (body.canal === 'CALL_CENTER' && body.fechaNacimiento !== '1950-06-12') {
+      throw new Error('No se pudo verificar al paciente para iniciar el trámite.');
+    }
+    const datos = body.canal === 'CALL_CENTER'
+      ? { parentesco: 'Para mí',
+          prerregistro: { nombres: 'Teresa', apellidoPaterno: 'Ramírez', apellidoMaterno: 'Pérez', nacimiento: '1950-06-12' },
+          ...body.datos }
+      : body.datos ?? {};
     return saveCase(cases, {
       id: crypto.randomUUID(), patientId, tipoConsultaId: body.tipoConsultaId,
       pasoActual: 'inicio', estado: 'EN_PROGRESO', ultimoCanal: body.canal, version: 1,
-      datos: body.datos ?? {},
+      datos,
     });
   }
 

@@ -112,15 +112,18 @@ public sealed partial class ChatbotController(
         var pending = contexts.Where(context => !context.Immediate)
             .ToDictionary(context => context.Checkpoint.Id, context => context.Checkpoint);
 
+        var now = DateTime.UtcNow;
         var result = cases
             .Select(item =>
             {
                 var checkpoint = pending.TryGetValue(item.Id, out var current) && current.Version > item.Version
                     ? current
                     : CaseCheckpoint.FromCase(item);
+                checkpoint = checkpoint.WithActivityState(now);
+                var forSelf = item.PatientId == me && checkpoint.Datos.Parentesco != "Para otra persona";
                 return new PendingCase(checkpoint.Id, checkpoint.PatientId, checkpoint.TipoConsultaId,
                     checkpoint.PasoActual, checkpoint.Estado, checkpoint.UltimoCanal, checkpoint.Version,
-                    checkpoint.UpdatedAt, item.PatientId == me, item.PatientId == me ? null : item.ParentescoPaciente);
+                    checkpoint.UpdatedAt, forSelf, forSelf ? null : checkpoint.Datos.Parentesco);
             })
             .Where(item => !CaseCheckpoint.IsCompleted(item.Estado, item.PasoActual))
             .OrderByDescending(item => item.UpdatedAt)

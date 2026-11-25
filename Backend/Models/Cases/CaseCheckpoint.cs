@@ -24,6 +24,14 @@ public sealed record CaseCheckpoint(
     internal static bool IsCompleted(string state, string step) =>
         state == "COMPLETADO" || CompletedSteps.Contains(step);
 
+    internal CaseCheckpoint WithActivityState(DateTime now)
+    {
+        if (IsCompleted(Estado, PasoActual)) return this with { Estado = "COMPLETADO" };
+        return Estado == "EN_PROGRESO" && now - UpdatedAt >= TimeSpan.FromHours(1)
+            ? this with { Estado = "INTERRUMPIDO" }
+            : this;
+    }
+
     internal static CaseCheckpoint FromCase(PatientCase patientCase) => new(
         patientCase.Id, patientCase.PatientId, patientCase.TipoConsultaId, patientCase.PasoActual,
         IsCompleted(patientCase.Estado, patientCase.PasoActual) ? "COMPLETADO" : patientCase.Estado, patientCase.UltimoCanal, patientCase.Version, patientCase.UpdatedAt, ReadData(patientCase),

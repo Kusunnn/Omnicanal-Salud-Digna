@@ -26,6 +26,6 @@ internal sealed record CheckpointChange(
     string[]? CamposActualizados = null)
 {
     public string Resumen => TipoEvento == "CASO_RETOMADO"
-        ? "Se retomó el caso en otro canal."
+        ? CanalAnterior == Canal ? "Se retomó el caso en el mismo canal." : "Se retomó el caso en otro canal."
         : "Se guardó el avance del caso.";
 }

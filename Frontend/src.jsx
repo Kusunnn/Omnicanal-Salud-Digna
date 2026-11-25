@@ -6,6 +6,7 @@ import { AdminStats } from './AdminStats';
 import { CaseTimelineDialog } from './CaseTimelineDialog';
 import { DeleteCaseDialog } from './DeleteCaseDialog';
 import { VerifyPatientDialog } from './VerifyPatientDialog';
+import { StartPatientCaseDialog } from './StartPatientCaseDialog';
 import { WebCaseFlow } from './WebCaseFlow';
 import { ServicesHome, webServices } from './ServicesHome';
 import { api as backendApi, casesPath, casePath } from './backendClient';
@@ -44,6 +45,7 @@ function App() {
   const [patientQuery, setPatientQuery] = useState('');
   const [patientResults, setPatientResults] = useState(null);
   const [patientFilter, setPatientFilter] = useState(null);
+  const [patientForNewCase, setPatientForNewCase] = useState(null);
   const [notice, setNotice] = useState('');
   const [screen, setScreen] = useState('servicios');
   const [servicesOpen, setServicesOpen] = useState(false);
@@ -54,7 +56,7 @@ function App() {
   const admin = view === 'ADMIN';
   const operator = !personal && !admin;
   const staff = !personal && backendEnabled;
-  const caseChannel = operator && staff ? 'CALL_CENTER' : 'WEB';
+  const caseChannel = operator ? 'CALL_CENTER' : 'WEB';
   const useBackend = backendEnabled;
   const api = useCallback((path, method, body) => useBackend
     ? backendApi(path, method, body, admin ? '/admin-api' : operator ? '/operador-api' : '/api')
@@ -205,14 +207,27 @@ function App() {
     backRef.current?.click();
   }
 
+  async function openNewCase(ownerId, request) {
+    const item = await api(casesPath(ownerId), 'POST', request);
+    updateCase(item);
+    setRegistration(item);
+    window.scrollTo(0, 0);
+  }
+
   function chooseService(tipoConsultaId, estudio) {
     if (!patientId || busy) return;
     setServicesOpen(false);
+    void run(() => openNewCase(patientId, { tipoConsultaId, canal: 'WEB', datos: { estudio } }));
+  }
+
+  function startPatientCase(tipoConsultaId, fechaNacimiento) {
+    if (!patientForNewCase || busy) return;
     void run(async () => {
-      const item = await api(casesPath(patientId), 'POST', { tipoConsultaId, canal: 'WEB', datos: { estudio } });
-      updateCase(item);
-      setRegistration(item);
-      window.scrollTo(0, 0);
+      const estudio = webServices.find(service => service.id === tipoConsultaId)?.nombre;
+      await openNewCase(patientForNewCase.id, { tipoConsultaId, fechaNacimiento, canal: caseChannel, datos: { estudio } });
+      setPatientForNewCase(null);
+      setSearch('');
+      setBoardChannel('');
     });
   }
 
@@ -222,7 +237,7 @@ function App() {
         await api(casePath(item) + '/verificar-fecha-nacimiento', 'POST', { fechaNacimiento: birthDate });
       }
       let current = await api(casePath(item));
-      if (current.ultimoCanal !== caseChannel && current.estado !== 'COMPLETADO') {
+      if ((current.ultimoCanal !== caseChannel || current.estado === 'INTERRUMPIDO') && current.estado !== 'COMPLETADO') {
         current = await api(casePath(item) + '/retomar', 'POST', {
           canal: caseChannel, versionEsperada: current.version, interaccionId: crypto.randomUUID(),
         });
@@ -359,7 +374,13 @@ function App() {
           <button className="primary" disabled={busy || (!staff && !patientId) || !patientQuery.trim()}>Buscar</button></form>
         {patientResults?.length === 0 && <p>No se encontraron pacientes.</p>}
         {patientResults?.length > 0 && <ul>{patientResults.map(patient => <li key={patient.id}><button className="quiet" onClick={() => filterPatient(patient)}>{patient.nombreCompleto} · {patient.id.slice(0, 8)}</button></li>)}</ul>}
-        {patientFilter && <div className="actions"><strong>{patientFilter.nombreCompleto}</strong><button className="quiet" onClick={() => filterPatient(null)}>Ver todos los casos</button></div>}
+        {patientFilter && <div className="actions">
+          <strong>{patientFilter.nombreCompleto}</strong>
+          <button type="button" className="primary" disabled={busy} onClick={() => {
+            setError(''); setPatientForNewCase(patientFilter);
+          }}>Iniciar trámite</button>
+          <button type="button" className="quiet" onClick={() => filterPatient(null)}>Ver todos los casos</button>
+        </div>}
       </section>}
       {(staff || admin) && !authorized ? <p role="status">{busy ? "Conectando con el tablero…" : "La sesión del tablero local no está disponible."}</p> : <>
       {admin && <AdminStats cases={boardCases} titleFor={titleFor} channelName={channelName}/>}
@@ -374,6 +395,8 @@ function App() {
                 }} onDelete={personal || admin ? item => {setError(''); setCaseToDelete(item);} : undefined}/></>}
       {caseForHistory && <CaseTimelineDialog key={caseForHistory.id} item={caseForHistory}
         api={api} channelName={channelName} titleFor={titleFor} onClose={() => setCaseForHistory(null)}/>}
+      {patientForNewCase && <StartPatientCaseDialog patient={patientForNewCase} busy={busy} error={error}
+        onStart={startPatientCase} onCancel={() => {setPatientForNewCase(null); setError('');}}/>}
       {caseToVerify && <VerifyPatientDialog item={caseToVerify} error={error} busy={busy}
         onCancel={() => {setCaseToVerify(null); setError('');}}
         onVerify={date => continueInWeb(caseToVerify, date)}/>}

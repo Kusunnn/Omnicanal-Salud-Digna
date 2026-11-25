@@ -87,6 +87,8 @@ function pasoInvitado(servicioId, pasoId) {
   return respuesta ? { ...respuesta, texto: respuesta.texto.replaceAll("{clinica}", "Clínica Demo").replaceAll("{horario}", "mañana a las 9:00") }
     : { texto: m.noEntendi, opciones: [BOTON_MENU] };
 }
+const nombreDestinatario = parentesco => parentesco === "Para otra persona" ? "otra persona" : parentesco;
+
 function pasoCaso(sesion, caso, prefijo = "") {
   const servicio = buscarServicio(caso.tipoConsultaId);
   const respuesta =
@@ -97,7 +99,7 @@ function pasoCaso(sesion, caso, prefijo = "") {
   if (!respuesta) return { texto: prefijo + m.pasoDesconocido, opciones: [BOTON_ASESOR, BOTON_MIS_TRAMITES] };
 
   const info = sesion.casos.get(caso.id);
-  const para = info && !info.paraMi ? m.paraFamiliar(info.parentesco) : "";
+  const para = info && !info.paraMi ? m.paraFamiliar(nombreDestinatario(info.parentesco)) : "";
   const clinica = caso.datos?.clinica || "Por seleccionar";
   const cita = [caso.datos?.fecha, caso.datos?.horario?.slice(0, 5)].filter(Boolean).join(" a las ");
   const texto = respuesta.texto.replaceAll("{clinica}", clinica).replaceAll("{horario}", cita || "Por seleccionar");
@@ -147,7 +149,7 @@ async function pantallaPrincipal(sesion, saludo = "") {
   const opciones = lista.slice(0, MAX_PENDIENTES).map((c) => {
     const servicio = buscarServicio(c.tipoConsultaId);
     const paso = servicio && buscarPaso(servicio, c.pasoActual);
-    const para = c.paraMi ? m.paraTi : `Para: ${c.parentesco || "familiar"}`;
+    const para = c.paraMi ? m.paraTi : `Para: ${nombreDestinatario(c.parentesco) || "familiar"}`;
     return {
       id: `caso:${c.id}`,
       titulo: recortar(servicio ? `${emojiDe(servicio)} ${servicio.nombre}` : c.tipoConsultaId, 24),
@@ -195,7 +197,7 @@ async function continuarCaso(sesion, caseId) {
   if (!caso) return pantallaPrincipal(sesion);
 
   let prefijo = "";
-  if (caso.ultimoCanal !== backend.CANAL) {
+  if (caso.ultimoCanal !== backend.CANAL || caso.estado === "INTERRUMPIDO") {
     const canalAnterior = m.canales[caso.ultimoCanal] || caso.ultimoCanal;
     const r = await backend.retomar(sesion, info.patientId, caseId, caso.version);
     if (r.caso) {

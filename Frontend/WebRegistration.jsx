@@ -63,11 +63,17 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
     return () => window.clearTimeout(timer.current);
   }, [draftKey, hasChanges, busy]);
 
-  function progressData() {
+  function progressData(selectedRecipient = recipient) {
     const appointment = Object.fromEntries(Object.entries({
-      clinica: clinic, fecha: date, horario: time, parentesco: recipient,
+      clinica: clinic, fecha: date, horario: time, parentesco: selectedRecipient,
     }).filter(([, value]) => value));
     return { ...appointment, prerregistro: draft };
+  }
+
+  function selectRecipient(value) {
+    setRecipient(value);
+    window.clearTimeout(timer.current);
+    saveRef.current?.(progressData(value));
   }
 
   function setField(field, value) {
@@ -105,9 +111,9 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
           <fieldset className="registerSex">
             <legend>¿Para quién es el estudio?</legend>
             <label><input type="radio" name="destinatario" value="Para mí" checked={forSelf}
-              onChange={() => setRecipient('Para mí')} required/> Para mí</label>
+              onChange={() => selectRecipient('Para mí')} disabled={busy} required/> Para mí</label>
             <label><input type="radio" name="destinatario" value="Para otra persona" checked={Boolean(recipient) && !forSelf}
-              onChange={() => setRecipient('Para otra persona')} required/> Para otra persona</label>
+              onChange={() => selectRecipient('Para otra persona')} disabled={busy} required/> Para otra persona</label>
           </fieldset>
           <label>Clínica<select required value={clinic} onChange={e => setClinic(e.target.value)}>
             <option value="">Selecciona una clínica</option>
