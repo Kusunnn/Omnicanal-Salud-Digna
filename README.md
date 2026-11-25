@@ -1,6 +1,6 @@
 # OmniCanal Salud Digna
 
-Prototipo de TecNM HackaTec para retomar **el mismo trámite** en Web, WhatsApp y Call Center. Los tres canales comparten el catálogo de servicios, la identidad del paciente y el estado del caso. Administración consulta el avance y la línea de tiempo por folio. Las citas y los pagos son simulados.
+Prototipo de innovación del TecNM Delicias, para retomar **el mismo trámite** en Web, WhatsApp y Call Center. Los tres canales comparten el catálogo de servicios, la identidad del paciente y el estado del caso. Administración consulta el avance y la línea de tiempo por folio. Las citas y los pagos son simulados.
 
 ## Requisitos en Windows
 
@@ -83,9 +83,9 @@ npm --prefix Frontend run dev -- --port 5173 --strictPort
 | [Operador de Call Center](http://localhost:5173/?vista=operador) | Sesión local de asesor. Busca al paciente y verifica su fecha de nacimiento para retomar. |
 | [Administración](http://localhost:5173/?vista=admin) | Sesión local de administrador. Consulta casos, métricas e historial por folio. |
 
-### Acceso para el jurado
+### Acceso Operador y Administrador
 
-Abre [Operador](http://localhost:5173/?vista=operador) o [Administración](http://localhost:5173/?vista=admin) en el navegador del equipo que ejecuta el proyecto. Después de configurar las claves del paso 3, ambas vistas abren directamente. Los evaluadores pueden usar los dos tableros sin crear una cuenta ni introducir una contraseña. Para retomar desde Operador se usa la fecha de nacimiento del paciente de prueba.
+Abre [Operador](http://localhost:5173/?vista=operador) o [Administración](http://localhost:5173/?vista=admin) en el navegador del equipo que ejecuta el proyecto. Después de configurar las claves del paso 3, ambas vistas abren directamente. Para retomar desde Operador se usa la fecha de nacimiento del paciente de prueba.
 
 ### Datos ficticios incluidos
 
@@ -95,7 +95,7 @@ Abre [Operador](http://localhost:5173/?vista=operador) o [Administración](http:
 | Enrique Salazar Navarro | `paciente0002@example.test` | `DEMO-0002` | `DEMO00000000000002` | `+520000000002` | `19/03/1989` |
 | Daniela Ramírez Martínez | `paciente0003@example.test` | `DEMO-0003` | `DEMO00000000000003` | `+520000000003` | `02/10/2003` |
 
-Los números del seed son ficticios. Para probar WhatsApp con Teresa, reemplaza su teléfono en pgAdmin por el número del celular de prueba **ya autorizado en Meta**, en formato internacional. Eso vincula el mismo paciente del portal con el chatbot. Conserva la fecha de nacimiento de la tabla.
+Los números del seed son ficticios. Para probar WhatsApp con Teresa, reemplaza su teléfono en pgAdmin por el número del celular de prueba **ya autorizado en Meta**, en formato internacional, eso vincula el mismo paciente del portal con el chatbot. Conserva la fecha de nacimiento de la tabla.
 
 ```sql
 UPDATE public.patients
@@ -128,15 +128,6 @@ WHERE curp = 'DEMO00000000000001';
 
 Los archivos `Frontend/.env.local` y `Chatbot/.env` quedan fuera de Git. Para más detalles de WhatsApp, consulta [la guía del chatbot](Chatbot/README.md).
 
-## Recorrido para la demostración
-
-1. **Web.** Entra como Teresa con su correo o ticket. Inicia un Ultrasonido, selecciona una clínica y espera que termine el guardado. Anota el folio en **Pendientes**. Deja la cita sin confirmar.
-2. **WhatsApp.** Dentro de los cinco minutos siguientes, escribe **Hola** desde el número vinculado. Selecciona **Míos, este número**, verifica con `12/06/1950` y elige el trámite pendiente. Comprueba que conserva la clínica, elige horario y completa el pago simulado. Deja pendiente la confirmación.
-3. **Call Center.** Busca a Teresa, abre el mismo folio con **Retomar en Call Center** y verifica su fecha de nacimiento. Comprueba que el pago está registrado y pulsa **Confirmar cita**.
-4. **Administración.** Busca el folio en **Completados** y abre el botón de tres puntos. Revisa la línea de tiempo con las acciones, las horas y los canales. Vuelve a **Mis trámites** en WhatsApp y verifica que ese folio ya no cuente como pendiente.
-
-Para demostrar la escritura diferida, usa un segundo folio. Guarda un cambio intermedio y abre su historial antes de cinco minutos. Luego deja el caso sin cambios y vuelve a abrir el historial después de que el worker lo procese. Debe conservarse el mismo evento, con la misma hora y el mismo canal, y desaparecer el indicador **Pendiente de sincronizar**.
-
 ## Arquitectura
 
 ```mermaid
@@ -162,9 +153,9 @@ flowchart LR
 ```
 
 - **Identidad.** El portal usa una sesión de paciente en `Development`. WhatsApp valida teléfono y fecha de nacimiento tras comprobar la firma de Meta. El servidor autoriza el acceso a casos según la identidad y el rol.
-- **Contexto.** Cada caso tiene una versión. La API valida la transición y combina el avance reciente en Redis con la información persistida. Los cambios intermedios se consolidan tras **5 minutos sin cambios** o **10 minutos desde el primer cambio pendiente**, lo que ocurra antes.
-- **Confirmación.** La creación del caso, la reanudación entre canales y los hitos de confirmación se guardan de inmediato en PostgreSQL. Si Redis deja de responder, las lecturas pueden mostrar el último estado confirmado. Un guardado que no se puede confirmar se reporta como error.
+- **Contexto y Estado.** Cada caso tiene una versión. La API valida la transición y combina el avance reciente en Redis con la información persistida. Los cambios intermedios se consolidan tras **5 minutos sin cambios** o **10 minutos desde el primer cambio pendiente**, lo que ocurra antes.
 - **Trazabilidad.** `CASO_CREADO`, `CHECKPOINT_GUARDADO` y `CASO_RETOMADO` se consultan por folio. El historial muestra el momento, el canal y la transición registrada. Las confirmaciones se reconocen por el checkpoint alcanzado.
+- **Seguridad.** El prototipo verifica la identidad mediante preguntas sobre datos ya registrados. En WhatsApp, el sistema vincula el número del remitente con su fecha de nacimiento. En Call Center, el asesor valida esa fecha antes de retomar un trámite. Los datos personales se mantienen dentro del flujo de atención de OmniCanal y cada canal muestra solo lo necesario para identificar al paciente, registrar su avance o continuar el trámite.
 
 ### Secuencia de un cambio de canal
 
