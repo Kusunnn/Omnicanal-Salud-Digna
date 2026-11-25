@@ -32,7 +32,7 @@ export async function demoApi(path, method = 'GET', body = {}) {
   if (path === '/demo/identidad/personal' && method === 'POST' && body.rol === 'ADMIN') return { rol: 'ADMIN' };
   const route = path.split('?')[0];
   if (route === '/tablero/casos' && method === 'GET') return readCases().slice(0, 100);
-  const match = route.match(/^\/pacientes\/([^/]+)\/casos(?:\/([^/]+))?(?:\/(checkpoint|retomar))?$/);
+  const match = route.match(/^\/pacientes\/([^/]+)\/casos(?:\/([^/]+))?(?:\/(checkpoint|retomar|verificar-fecha-nacimiento))?$/);
   if (!match || match[1] !== patientId) throw new Error('Ruta de demostración no disponible.');
 
   const [, , caseId, action] = match;
@@ -49,6 +49,15 @@ export async function demoApi(path, method = 'GET', body = {}) {
   const item = cases.find(existing => existing.id === caseId);
   if (!item) throw new Error('No se encontró el caso de demostración.');
   if (!action && method === 'GET') return item;
+  if (action === 'verificar-fecha-nacimiento' && method === 'POST') {
+    if (body.fechaNacimiento !== '1950-06-12') throw new Error('No se pudo verificar la fecha de nacimiento del paciente.');
+    return null;
+  }
+  if (!action && method === 'DELETE') {
+    if (item.estado === 'COMPLETADO') throw new Error('El trámite confirmado no se puede eliminar.');
+    window.localStorage.setItem(storageKey, JSON.stringify(cases.filter(existing => existing.id !== caseId)));
+    return null;
+  }
   if (item.version !== body.versionEsperada || item.estado === 'COMPLETADO') {
     throw new Error('El caso cambió. Vuelve al tablero para actualizarlo.');
   }

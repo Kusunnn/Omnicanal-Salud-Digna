@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { ChevronDown, MapPin, Search, Ticket, UserRound } from 'lucide-react';
 import { CaseBoard } from './CaseBoard';
 import { AdminStats } from './AdminStats';
+import { DeleteCaseDialog } from './DeleteCaseDialog';
+import { VerifyPatientDialog } from './VerifyPatientDialog';
 import { WebCaseFlow } from './WebCaseFlow';
 import { ServicesHome, webServices } from './ServicesHome';
 import { api as backendApi, casesPath, casePath } from './backendClient';
@@ -49,6 +51,9 @@ function App() {
     ? (path, method, body) => backendApi(path, method, body, admin ? '/admin-api' : '/api')
     : demoApi;
   const backRef = useRef(null);
+  const destination = useRef(null);
+  const [caseToDelete, setCaseToDelete] = useState(null);
+  const [caseToVerify, setCaseToVerify] = useState(null);
   const [nextService, setNextService] = useState(null);
   const authorized = admin ? session?.rol === 'ADMIN' : !personal || session?.rol === 'PACIENTE';
   const service = item => item.datos?.estudio ?? 'Consulta';
@@ -122,6 +127,33 @@ function App() {
     chooseService(nextService.tipoConsultaId, nextService.estudio);
   }, [nextService, registration, busy]);
 
+  function openPatientScreen(screenName) {
+    if (busy) return;
+    setServicesOpen(false);
+    setError('');
+    if (registration) {
+      destination.current = screenName;
+      backRef.current?.click();
+    } else setScreen(screenName);
+  }
+
+  function closeRegistration(defaultScreen = 'procesos') {
+    const screenName = destination.current ?? defaultScreen;
+    destination.current = null;
+    setRegistration(null);
+    setScreen(screenName);
+  }
+
+  function deleteCase() {
+    if (!caseToDelete || busy) return;
+    void run(async () => {
+      await api(casePath(caseToDelete), 'DELETE');
+      setCases(current => current.filter(item => item.id !== caseToDelete.id));
+      setCaseToDelete(null);
+      setNotice('Trámite eliminado de tus pendientes.');
+    });
+  }
+
   function selectService(tipoConsultaId, estudio) {
     if (busy) return;
     if (!registration) return chooseService(tipoConsultaId, estudio);
@@ -141,8 +173,11 @@ function App() {
     });
   }
 
-  function continueInWeb(item) {
+  function continueInWeb(item, birthDate) {
     void run(async () => {
+      if (!personal && !admin) {
+        await api(casePath(item) + '/verificar-fecha-nacimiento', 'POST', { fechaNacimiento: birthDate });
+      }
       let current = await api(casePath(item));
       if (current.ultimoCanal !== 'WEB' && current.estado !== 'COMPLETADO') {
         current = await api(casePath(item) + '/retomar', 'POST', {
@@ -150,6 +185,7 @@ function App() {
         });
       }
       updateCase(current);
+      setCaseToVerify(null);
       if (current.estado !== 'COMPLETADO') setRegistration(current);
       window.scrollTo(0, 0);
     });
@@ -173,8 +209,7 @@ function App() {
         setRegistration(current);
       }
       if (!confirm && !exit) return;
-      setRegistration(null);
-      setScreen('procesos');
+      closeRegistration();
       setNotice(confirm ? 'Cita simulada confirmada.' : 'Avance guardado. Puedes continuar después.');
       window.scrollTo(0, 0);
     });
@@ -199,8 +234,8 @@ function App() {
       <div className="portalHeaderInner portalMenu">
         <div className="portalSearch"><span>Buscar estudios o paquetes</span><Search size={16}/></div>
         <div className="portalMenuItems">
-                    {session ? <button type="button" className="portalTextAction" disabled={Boolean(registration)}
-            onClick={() => {setScreen('servicios'); setServicesOpen(false); setError('');}}
+                    {session ? <button type="button" className="portalTextAction" disabled={busy}
+            onClick={() => openPatientScreen('servicios')}
             aria-current={!registration && screen === 'servicios' ? 'page' : undefined}>Inicio</button> : <span>Inicio</span>}
           {personal && session ? <div className="portalServicesMenu" onBlur={event => {
             if (!event.currentTarget.contains(event.relatedTarget)) setServicesOpen(false);
@@ -220,7 +255,7 @@ function App() {
           </div> : <span>Servicios <ChevronDown size={13}/></span>}
           <span>Clínicas</span>
                     {patientSignIn ? <span className="portalMenuActive"><UserRound size={15}/> Iniciar sesión</span> :
-            <button className="portalTextAction" disabled={Boolean(registration)} onClick={() => {setScreen('procesos'); setError('');}}><UserRound size={15}/> Pendientes{hasPendingCases && <span className="pendingDot" role="img" aria-label="Hay trámites pendientes"/>}</button>}
+            <button className="portalTextAction" disabled={busy} onClick={() => openPatientScreen('procesos')}><UserRound size={15}/> Pendientes{hasPendingCases && <span className="pendingDot" role="img" aria-label="Hay trámites pendientes"/>}</button>}
 
         </div>
       </div>
@@ -253,9 +288,9 @@ function App() {
         </form>
       </section>
       </div>
-    </main> : registration ? <WebCaseFlow key={registration.id} item={registration}
+    </main> : registration ? <WebCaseFlow key={registration.id} item={registration} operator={!personal}
       busy={busy} error={error} onSave={saveCheckpoint} backRef={backRef}
-      onBack={data => {if (data) saveCheckpoint(data, false, true); else {setRegistration(null); setScreen('procesos'); setError('');}}}/> :
+      onBack={data => {if (data) saveCheckpoint(data, false, true); else {closeRegistration(); setError('');}}}/> :
       personal && screen === 'servicios' ? <ServicesHome onChoose={chooseService} busy={busy} error={error}/> :<main className={personal ? "portalWorkspace" : "portalWorkspace staffWorkspace"}>
       <section className="intro">
         <div><span className="eyebrow">{personal ? 'ATENCIÓN AL PACIENTE' : 'OPERACIÓN OMNICANAL'}</span>
@@ -277,7 +312,15 @@ function App() {
         search={search} onSearch={setSearch} channel={boardChannel} onChannel={setBoardChannel}
         channels={channels} channelName={channelName} service={service} titleFor={titleFor}
         personal={personal} admin={admin} authorized={authorized} role={admin ? "ADMIN" : "ASESOR"} busy={busy}
-        onContinue={continueInWeb}/></>}
+                onContinue={item => {
+                  if (personal || admin) continueInWeb(item);
+                  else {setError(''); setCaseToVerify(item);}
+                }} onDelete={personal || admin ? item => {setError(''); setCaseToDelete(item);} : undefined}/></>}
+      {caseToVerify && <VerifyPatientDialog item={caseToVerify} error={error} busy={busy}
+        onCancel={() => {setCaseToVerify(null); setError('');}}
+        onVerify={date => continueInWeb(caseToVerify, date)}/>}
+      {caseToDelete && <DeleteCaseDialog item={caseToDelete} title={titleFor(caseToDelete)} channel={channelName(caseToDelete.ultimoCanal)}
+        busy={busy} error={error} onCancel={() => {setCaseToDelete(null); setError('');}} onDelete={deleteCase}/>}
     </main>}
     {patientSignIn ? <footer className="patientFooter">
       <div><strong>Portal de atención</strong><p>Consulta y seguimiento de trámites</p></div>

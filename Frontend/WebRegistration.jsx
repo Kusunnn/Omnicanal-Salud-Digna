@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ClipboardList, MapPin, MessageCircle } from 'lucide-react';
 
 export function WebRegistration({ item, onBack, onComplete, operator = false, backRef, busy = false, saveError, onAutoSave, submitLabel = "Generar prerregistro" }) {
+  const [recipient, setRecipient] = useState(item.datos.parentesco ?? '');
+  const forSelf = /^para m[ií]$/i.test(recipient);
   const [clinic, setClinic] = useState(item.datos.clinica ?? '');
   const [date, setDate] = useState(item.datos.fecha ?? '');
   const [time, setTime] = useState(item.datos.horario?.slice(0, 5) ?? '');
@@ -13,8 +15,8 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
   const saveRef = useRef(onAutoSave);
   saveRef.current = onAutoSave;
   const timer = useRef(null);
-  const draftKey = JSON.stringify([clinic, date, time]);
-  const savedKey = JSON.stringify([item.datos.clinica ?? '', item.datos.fecha ?? '', item.datos.horario?.slice(0, 5) ?? '']);
+  const draftKey = JSON.stringify([clinic, date, time, recipient]);
+  const savedKey = JSON.stringify([item.datos.clinica ?? '', item.datos.fecha ?? '', item.datos.horario?.slice(0, 5) ?? '', item.datos.parentesco ?? '']);
   const hasChanges = draftKey !== savedKey;
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
   }, [draftKey, hasChanges, busy]);
 
   function progressData() {
-    return Object.fromEntries(Object.entries({ clinica: clinic, fecha: date, horario: time }).filter(([, value]) => value));
+    return Object.fromEntries(Object.entries({ clinica: clinic, fecha: date, horario: time, parentesco: recipient }).filter(([, value]) => value));
   }
 
   function submit(event) {
@@ -44,7 +46,7 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
     onComplete(progressData());
   }
 
-  return <main className="webRegister">
+  return <main className={operator ? "webRegister staffRegistration" : "webRegister"}>
     <button ref={backRef} className="quiet" onClick={() => {window.clearTimeout(timer.current); onBack(hasChanges ? progressData() : undefined);}} disabled={busy}><ChevronLeft size={17}/> {operator ? "Volver al tablero" : "Mis procesos"}</button>
     <div className="registerLayout">
       <aside className="registerInfo">
@@ -62,6 +64,13 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
       <section className="registrar panel">
         <div className="registerTab"><ClipboardList size={22}/> Prerregistro</div>
         <form className="registerForm" onSubmit={submit}>
+          <fieldset className="registerSex">
+            <legend>¿Para quién es el estudio?</legend>
+            <label><input type="radio" name="destinatario" value="Para mí" checked={forSelf}
+              onChange={() => setRecipient('Para mí')} required/> Para mí</label>
+            <label><input type="radio" name="destinatario" value="Para otra persona" checked={Boolean(recipient) && !forSelf}
+              onChange={() => setRecipient('Para otra persona')} required/> Para otra persona</label>
+          </fieldset>
           <label>Clínica<select required value={clinic} onChange={e => setClinic(e.target.value)}>
             <option value="">Selecciona una clínica</option>
             <option>Chihuahua Nueva España</option><option>Culiacán Centro</option>
@@ -73,7 +82,7 @@ export function WebRegistration({ item, onBack, onComplete, operator = false, ba
             <label>Horario<select required value={time} onChange={e => setTime(e.target.value)}><option value="">Selecciona un horario</option><option value="08:00">08:00</option><option value="09:30">09:30</option><option value="11:00">11:00</option></select></label>
           </div>
           <hr/>
-          <h2>Datos personales</h2>
+          <h2>Datos de la persona que se hará el estudio</h2>
           <div className="fieldGrid">
             <label>Nombre(s)<input required name="nombres" placeholder="Nombre(s)"/></label>
             <label>Apellido paterno<input required name="apellidoPaterno" placeholder="Apellido paterno"/></label>

@@ -14,6 +14,7 @@ public sealed class PatientCase
     public DateOnly? FechaCita { get; set; }
     public TimeOnly? HorarioCita { get; set; }
     public DateTime? InicioCitaAt { get; set; }
+    public DateTime? ArchivedAt { get; set; }
     public DateTime CreatedAt { get; private set; }
     public int Version { get; set; } = 1;
     public string? Estudio { get; set; }

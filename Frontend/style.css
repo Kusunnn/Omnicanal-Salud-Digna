@@ -148,3 +148,22 @@ body:has(.workspaceHeader){background:#f3f8f6}
 
 .internalFooter{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
 .internalFooter .staffFooterLink{margin:0}
+
+.portalWorkspace .cardDelete{margin-top:6px;padding:4px 8px;font-size:.8rem;color:#a32a3b}
+.cardDelete:hover{background:#fff0f2}
+.deleteCaseDialog{width:min(440px,calc(100% - 32px));padding:22px;border:1px solid #d8e5ee;border-radius:13px;color:inherit;box-shadow:0 14px 50px #102f4950}
+.deleteCaseDialog::backdrop{background:#102a3c75}
+.deleteCaseDialog>p{margin-top:8px}.deleteCaseDialog .actions{justify-content:flex-end;margin-bottom:0}
+.deleteCasePreview{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;background:#f1f7fb;border-radius:7px}
+.deleteCasePreview dd{margin:0;overflow-wrap:anywhere}
+.deleteCaseConfirm{background:#a92a3b;color:#fff;border:0;border-radius:8px;padding:9px 13px;font-weight:700}
+.deleteCaseConfirm:hover{background:#8c2030}
+
+.staffRegistration{max-width:none;padding-inline:clamp(12px,2.5vw,32px)}
+.staffRegistration .registerLayout{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:8px}
+.staffRegistration .registerInfo{text-align:center;padding:4px 0}
+.staffRegistration .registerInfo h1{font-size:clamp(1.2rem,2.3vw,1.65rem);margin:2px 0 4px;letter-spacing:-.02em}
+.staffRegistration .registerInfo>p:not(.eyebrow),.staffRegistration .registerInfo>.registerSummaryCard,.staffRegistration .registerInfo>h2{display:none}
+.staffRegistration .registrar{width:100%}
+
+.verifyPatientForm{margin-top:14px}

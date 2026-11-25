@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -34,7 +35,7 @@ public sealed class CasesController(
         }
 
         var cases = await database.Cases.AsNoTracking()
-            .Where(item => item.PatientId == patientId &&
+            .Where(item => item.PatientId == patientId && item.ArchivedAt == null &&
                 (incluirCompletados || item.Estado == "EN_PROGRESO" || item.Estado == "INTERRUMPIDO"))
             .ToListAsync(cancellationToken);
 
@@ -49,6 +50,32 @@ public sealed class CasesController(
             .OrderByDescending(item => item.UpdatedAt)
             .ThenByDescending(item => item.Id)
             .ToArray());
+    }
+
+    [HttpDelete("{caseId:guid}")]
+    [Authorize(Roles = "PACIENTE,ADMIN")]
+    public async Task<IActionResult> Archive(Guid patientId, Guid caseId, CancellationToken cancellationToken)
+    {
+        if (!User.IsInRole("ADMIN") && (!Guid.TryParse(ActorId, out var actor) || actor != patientId))
+        {
+            return Forbid();
+        }
+
+        var cases = database.Cases.Where(item => item.Id == caseId && item.PatientId == patientId);
+        string[] finalSteps = ["cita-confirmada", "cita-confirmada-con-pago", "resumen-cita",
+            "resumen-cita-con-pago", "prerregistro-confirmado", "resumen-visita", "resumen-requisitos", "resumen-estudios"];
+        var now = DateTime.UtcNow;
+        var changed = await cases
+            .Where(item => item.ArchivedAt == null && item.Estado != "COMPLETADO" && !finalSteps.Contains(item.PasoActual))
+            .ExecuteUpdateAsync(update => update.SetProperty(item => item.ArchivedAt, now), cancellationToken);
+        if (changed > 0 || await cases.AnyAsync(item => item.ArchivedAt != null, cancellationToken))
+        {
+            return NoContent();
+        }
+
+        return await cases.AnyAsync(cancellationToken)
+            ? Problem(statusCode: 409, title: "El trámite ya fue confirmado y no se puede eliminar.")
+            : NotFound();
     }
 
     [HttpGet("{caseId:guid}")]
@@ -217,6 +244,25 @@ public sealed class CasesController(
 
         return await SaveAsync(current, next, cancellationToken);
     }
+
+    [HttpPost("{caseId:guid}/verificar-fecha-nacimiento")]
+    [EnableRateLimiting("demo-identity")]
+    public async Task<IActionResult> VerifyBirthDate(
+        Guid patientId, Guid caseId, VerifyBirthDateRequest request, CancellationToken cancellationToken)
+    {
+        if (!await CanAccessCaseAsync(patientId, caseId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var matches = await database.Patients.AsNoTracking().AnyAsync(patient =>
+            patient.Id == patientId && patient.FechaNacimiento == request.FechaNacimiento, cancellationToken);
+        return matches
+            ? NoContent()
+            : Problem(statusCode: 403, title: "No se pudo verificar la fecha de nacimiento del paciente.");
+    }
+
+    public sealed record VerifyBirthDateRequest([Required] DateOnly? FechaNacimiento);
 
     [HttpPost("{caseId:guid}/retomar")]
     [Authorize(Roles = "PACIENTE,ASESOR,ADMIN")]
@@ -411,13 +457,10 @@ public sealed class CasesController(
 
     private async Task<bool> CanAccessCaseAsync(Guid patientId, Guid caseId, CancellationToken token)
     {
-        if (IsOwnerOrStaff(patientId))
-        {
-            return true;
-        }
-
-        return Guid.TryParse(ActorId, out var actor) && await database.Cases.AnyAsync(item =>
-            item.Id == caseId && item.PatientId == patientId && item.SolicitantePatientId == actor, token);
+        var ownerOrStaff = IsOwnerOrStaff(patientId);
+        Guid? requester = Guid.TryParse(ActorId, out var actor) ? actor : null;
+        return await database.Cases.AnyAsync(item => item.Id == caseId && item.PatientId == patientId
+            && item.ArchivedAt == null && (ownerOrStaff || (requester != null && item.SolicitantePatientId == requester)), token);
     }
 
     private async Task<CheckpointContext?> ReadForWriteAsync(Guid patientId, Guid caseId, CancellationToken token)

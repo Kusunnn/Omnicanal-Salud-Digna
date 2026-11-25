@@ -250,6 +250,10 @@ namespace SaludDigna.Backend.Data.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
                     b.Property<string>("Clinica")
                         .HasMaxLength(180)
                         .HasColumnType("character varying(180)")

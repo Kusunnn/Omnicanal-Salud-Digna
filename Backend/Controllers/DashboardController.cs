@@ -18,7 +18,7 @@ public sealed class DashboardController(SaludDignaDbContext database, CaseCheckp
     public async Task<ActionResult<IReadOnlyList<CaseCheckpoint>>> Get(
         CancellationToken token, [FromQuery, Range(1, 100)] int limite = 30)
     {
-        var cases = await database.Cases.AsNoTracking()
+        var cases = await database.Cases.AsNoTracking().Where(item => item.ArchivedAt == null)
             .OrderByDescending(item => item.UpdatedAt).ThenByDescending(item => item.Id)
             .Take(limite).ToListAsync(token);
         var confirmed = cases.Select(CaseCheckpoint.FromCase).ToArray();

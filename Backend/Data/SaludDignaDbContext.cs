@@ -76,6 +76,7 @@ public sealed class SaludDignaDbContext(DbContextOptions<SaludDignaDbContext> op
             patientCase.Property(c => c.FechaCita).HasColumnName("fecha_cita");
             patientCase.Property(c => c.HorarioCita).HasColumnName("horario_cita");
             patientCase.Property(c => c.InicioCitaAt).HasColumnName("inicio_cita_at");
+            patientCase.Property(c => c.ArchivedAt).HasColumnName("archived_at");
             patientCase.Property(c => c.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
             patientCase.HasOne<Patient>().WithMany().HasForeignKey(c => c.SolicitantePatientId)
                 .OnDelete(DeleteBehavior.Restrict);
